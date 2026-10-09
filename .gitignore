@@ -1,0 +1,216 @@
+# ============================================================
+# IMPERIAL CODECENTER — GITIGNORE
+# ============================================================
+
+# ----------------------------
+# Secrets & environment
+# ----------------------------
+.env
+.env.*
+!.env.example
+!.env.template
+*.pem
+*.key
+*.p12
+*.pfx
+*.secret
+secrets/
+credentials/
+.local/
+
+# ----------------------------
+# Python
+# ----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.pyd
+*.egg
+*.egg-info/
+.eggs/
+build/
+dist/
+wheels/
+pip-wheel-metadata/
+share/python-wheels/
+.pytest_cache/
+.mypy_cache/
+.pytype/
+.pyre/
+.ruff_cache/
+.dmypy.json
+.pyre/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+nosetests.xml
+.tox/
+.nox/
+hypothesis/
+.pybuilder/
+site/
+venv/
+ENV/
+env/
+.venv/
+venv.bak/
+venv.tmp/
+
+# ----------------------------
+# uv
+# ----------------------------
+# Keep uv.lock versioned for reproducible builds.
+# Ignore only local uv cache.
+.python-version.local
+
+# ----------------------------
+# Rust / Cargo
+# ----------------------------
+**/target/
+**/*.rs.bk
+Cargo.toml.orig
+Cargo.lock.orig
+
+# Keep Cargo.lock versioned for this application.
+
+# ----------------------------
+# Node.js / JavaScript / CSS
+# ----------------------------
+node_modules/
+bower_components/
+.npm/
+.pnpm-store/
+.yarn/
+.yarn-cache/
+.parcel-cache/
+.next/
+.nuxt/
+.svelte-kit/
+dist/
+out/
+coverage/
+*.tsbuildinfo
+.eslintcache
+.stylelintcache
+vite.config.*.timestamp-*
+vite.config.ts.timestamp-*
+
+# ----------------------------
+# Generated frontend assets
+# ----------------------------
+# Keep source assets such as PNG, SVG, ICO, CSS and JS.
+# Add specific generated directories here if needed.
+
+# ----------------------------
+# Databases & local data
+# ----------------------------
+*.db
+*.sqlite
+*.sqlite3
+*.db-journal
+*.sqlite-wal
+*.sqlite-shm
+data/
+datasets/
+corpus/
+indexes/
+embeddings/
+vector_store/
+chroma/
+lancedb/
+faiss_index/
+*.parquet
+*.arrow
+*.feather
+
+# ----------------------------
+# AI models & downloaded datasets
+# ----------------------------
+models/
+checkpoints/
+weights/
+*.safetensors
+*.gguf
+*.ggml
+*.onnx
+*.pt
+*.pth
+*.ckpt
+*.bin
+*.model
+*.tflite
+*.pb
+*.h5
+*.keras
+
+# ----------------------------
+# Logs & temporary files
+# ----------------------------
+*.log
+logs/
+tmp/
+temp/
+.cache/
+*.tmp
+*.temp
+*.swp
+*.swo
+*.bak
+*.old
+*.orig
+*~
+
+# ----------------------------
+# Tests & benchmarks generated output
+# ----------------------------
+test-results/
+playwright-report/
+blob-report/
+benchmark-results/
+*.prof
+*.profraw
+*.gcda
+*.gcno
+
+# ----------------------------
+# Documentation generated output
+# ----------------------------
+docs/_build/
+docs/site/
+_site/
+.sphinx-build/
+
+# ----------------------------
+# Editors & IDEs
+# ----------------------------
+.vscode/
+.idea/
+*.iml
+*.sublime-workspace
+*.sublime-project
+*.code-workspace
+.zed/
+.history/
+
+# ----------------------------
+# OS files
+# ----------------------------
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Thumbs.db:encryptable
+Desktop.ini
+$RECYCLE.BIN/
+.Trash-*
+.nfs*
+
+# ----------------------------
+# Local scripts & personal configuration
+# ----------------------------
+*.local
+*.local.*
+config.local.*
+settings.local.*
