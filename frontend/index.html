@@ -2,17 +2,129 @@
 <html lang="fr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Imperial CodeCenter</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#0b0d12">
+
+    <title>Imperial-CodeCenter</title>
+
+    <link rel="icon" href="/static/assets/imperial.ico">
     <link rel="stylesheet" href="/static/style/style.css">
 </head>
+
 <body>
-    <main>
-        <h1>Imperial CodeCenter</h1>
-        <p id="status">Vérification du moteur...</p>
-        <pre id="details"></pre>
+    <header class="topbar">
+        <div class="brand">
+            <img
+                class="brand-logo"
+                src="/static/assets/imperial-32.png"
+                alt=""
+                width="28"
+                height="28"
+            >
+            <span>IMPÉRIAL</span>
+        </div>
+
+        <div class="connection">
+            <span
+                id="connection-status"
+                data-status="connecting"
+                aria-hidden="true"
+            ></span>
+            <span id="connection-label">Connexion...</span>
+        </div>
+    </header>
+
+    <main class="main-container">
+        <section class="hero">
+            <img
+                class="hero-logo"
+                src="/static/assets/imperial.png"
+                alt="Impérial"
+            >
+
+            <h1>Imperial-CodeCenter</h1>
+            <p>Trouve le code et la documentation dont tu as besoin.</p>
+        </section>
+
+        <section class="search-section" aria-label="Recherche">
+            <form id="search-form" class="search-bar">
+                <svg
+                    class="search-icon"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="21"
+                    height="21"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    aria-hidden="true"
+                >
+                    <circle cx="11" cy="11" r="8"></circle>
+                    <path d="m21 21-4.35-4.35"></path>
+                </svg>
+
+                <input
+                    id="search-input"
+                    type="search"
+                    name="query"
+                    placeholder="Recherche du code, une fonction, une idée..."
+                    autocomplete="off"
+                    aria-label="Requête de recherche"
+                >
+
+                <button type="submit" id="search-button">
+                    Chercher
+                </button>
+            </form>
+        </section>
+
+        <section class="upload-section" aria-labelledby="files-title">
+            <div class="section-heading">
+                <h2 id="files-title">Fichiers</h2>
+                <span class="file-counter" id="file-counter">0 fichier</span>
+            </div>
+
+            <label id="drop-zone" class="drop-zone" for="file-input">
+                <input
+                    id="file-input"
+                    type="file"
+                    multiple
+                    hidden
+                    accept=".c,.h,.cpp,.hpp,.rs,.py,.js,.ts,.html,.css,.json,.md,.txt,.toml,.yaml,.yml,.xml,.sh,.sql,.java,.go,.php,.rb,.swift,.kt,.pdf"
+                >
+
+                <span class="upload-icon" aria-hidden="true">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="30"
+                        height="30"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="1.7"
+                        stroke-linecap="round"
+                        stroke-linejoin="round"
+                    >
+                        <path d="M12 16V4"></path>
+                        <path d="m7 9 5-5 5 5"></path>
+                        <path d="M20 16.5v2A1.5 1.5 0 0 1 18.5 20h-13A1.5 1.5 0 0 1 4 18.5v-2"></path>
+                    </svg>
+                </span>
+
+                <span class="upload-text">
+                    <strong>Dépose tes fichiers ici</strong>
+                    <span>ou clique pour parcourir tes fichiers</span>
+                </span>
+            </label>
+
+            <div id="file-list" class="file-list" hidden></div>
+        </section>
+
+        <p id="message" class="message" role="status" aria-live="polite"></p>
     </main>
 
-    <script src="/static/scripts/app.js"></script>
+    <script src="/static/scripts/app.js" defer></script>
 </body>
 </html>
