@@ -1,12 +1,20 @@
+import json
+import logging
 from pathlib import Path
 
-from fastapi import FastAPI, File, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi import (
+    FastAPI,
+    File,
+    HTTPException,
+    UploadFile,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from codecenter_engine import healt
-
+from codecenter_engine import get_stats, healt
 
 # --------------------------------------------------
 # Configuration
@@ -14,6 +22,8 @@ from codecenter_engine import healt
 
 ROOT = Path(__file__).resolve().parents[2]
 FRONTEND = ROOT / "frontend"
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="Imperial CodeCenter API",
@@ -87,7 +97,14 @@ def rebuild_index() -> dict:
 
 def get_statistics() -> dict:
     """Retourne les statistiques du moteur et de l'index."""
-    raise NotImplementedError
+    try:
+        return json.loads(get_stats())
+    except Exception as exc:
+        logger.exception("Échec de récupération des statistiques Rust/PostgreSQL")
+        raise HTTPException(
+            status_code=503,
+            detail="Impossible de récupérer les statistiques du moteur.",
+        ) from exc
 
 
 def get_configuration() -> dict:
@@ -138,7 +155,7 @@ def status():
 
 @app.get("/api/v1/stats", tags=["System"])
 def statistics():
-    return not_implemented("statistics")
+    return get_statistics()
 
 
 # --------------------------------------------------

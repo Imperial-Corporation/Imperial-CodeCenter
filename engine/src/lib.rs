@@ -1,6 +1,9 @@
-use pyo3::exceptions::PyNotImplementedError;
+use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError};
 use pyo3::prelude::*;
 
+mod database;
+
+use crate::database::get_stats_json;
 
 // --------------------------------------------------
 // Santé du moteur
@@ -73,10 +76,9 @@ fn rebuild_index() -> PyResult<String> {
 // --------------------------------------------------
 
 #[pyfunction]
-fn get_stats() -> PyResult<String> {
-    Err(PyNotImplementedError::new_err(
-        "get_stats n'est pas encore implémentée",
-    ))
+fn get_stats(py: Python<'_>) -> PyResult<String> {
+    py.detach(get_stats_json)
+        .map_err(PyRuntimeError::new_err)
 }
 
 

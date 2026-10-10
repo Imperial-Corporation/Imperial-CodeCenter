@@ -5,11 +5,17 @@ ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT/config/deploy.conf"
 SERVICE_TEMPLATE="$ROOT/config/imperial-codecenter.service"
 MIGRATIONS="$ROOT/config/database/migrations"
+ENV_FILE="$ROOT/config/.env"
 
 [[ -f "$CONFIG" ]] || {
     echo "Erreur : config/deploy.conf introuvable." >&2
     exit 1
 }
+
+# shellcheck source=/dev/null
+source "$CONFIG"
+
+ENV_DEST="/etc/${SERVICE_NAME}/.env"
 
 [[ -f "$SERVICE_TEMPLATE" ]] || {
     echo "Erreur : modèle systemd introuvable." >&2
@@ -21,8 +27,15 @@ MIGRATIONS="$ROOT/config/database/migrations"
     exit 1
 }
 
-# shellcheck source=/dev/null
-source "$CONFIG"
+[[ -f "$ENV_FILE" ]] || {
+    echo "Erreur : config/.env introuvable." >&2
+    exit 1
+}
+
+[[ ! -L "$ENV_FILE" ]] || {
+    echo "Erreur : config/.env ne doit pas être un lien symbolique." >&2
+    exit 1
+}
 
 ENGINE="$ROOT/engine"
 API="$ROOT/api"
@@ -38,13 +51,87 @@ die() {
     exit 1
 }
 
+# Lit DATABASE_URL et extrait le mot de passe PostgreSQL.
+# Python sert uniquement à analyser correctement l'URL et ses encodages.
+# Le mot de passe n'est jamais affiché dans les logs.
+read_database_password() {
+    local encoded_password
+
+    encoded_password="$(
+        python3 - "$ENV_FILE" "$DB_USER" "$DB_NAME" <<'PY'
+import base64
+import sys
+from pathlib import Path
+from urllib.parse import unquote, urlsplit
+
+env_file, expected_user, expected_database = sys.argv[1:]
+
+value = None
+
+for line in Path(env_file).read_text(encoding="utf-8").splitlines():
+    line = line.strip()
+
+    if not line or line.startswith("#"):
+        continue
+
+    if line.startswith("DATABASE_URL="):
+        value = line.split("=", 1)[1].strip()
+
+        if (
+            len(value) >= 2
+            and value[0] == value[-1]
+            and value[0] in ("'", '"')
+        ):
+            value = value[1:-1]
+
+        break
+
+if not value:
+    sys.exit("DATABASE_URL absente de config/.env")
+
+try:
+    url = urlsplit(value)
+    username = unquote(url.username or "")
+    password = url.password
+    database = unquote(url.path.lstrip("/"))
+except (ValueError, UnicodeError):
+    sys.exit("DATABASE_URL invalide")
+
+if url.scheme not in ("postgresql", "postgres"):
+    sys.exit("DATABASE_URL doit utiliser PostgreSQL")
+
+if username != expected_user:
+    sys.exit("L'utilisateur de DATABASE_URL ne correspond pas à DB_USER")
+
+if database != expected_database:
+    sys.exit("La base de DATABASE_URL ne correspond pas à DB_NAME")
+
+if password is None or password == "":
+    sys.exit("DATABASE_URL doit contenir un mot de passe")
+
+# Base64 évite que les caractères spéciaux du mot de passe
+# soient interprétés par le shell pendant le transfert.
+print(base64.b64encode(unquote(password).encode("utf-8")).decode("ascii"))
+PY
+    )" || die "Impossible de lire ou de valider DATABASE_URL."
+
+    DATABASE_PASSWORD="$(
+        printf '%s' "$encoded_password" | base64 --decode
+    )" || die "Impossible de décoder le mot de passe PostgreSQL."
+
+    [[ -n "$DATABASE_PASSWORD" ]] ||
+        die "Le mot de passe PostgreSQL est vide."
+}
+
 [[ $EUID -ne 0 ]] || die "Lance ce script sans sudo."
+
 command -v sudo >/dev/null || die "sudo est requis."
 command -v curl >/dev/null || die "curl est requis."
 command -v psql >/dev/null || die "psql est absent : lance deploy.sh."
 command -v systemctl >/dev/null || die "systemd est requis."
 command -v cargo >/dev/null || die "Rust est absent : lance deploy.sh."
 command -v rustc >/dev/null || die "rustc est absent : lance deploy.sh."
+command -v python3 >/dev/null || die "python3 est requis."
 
 if command -v uv >/dev/null 2>&1; then
     UV_BIN="$(command -v uv)"
@@ -63,11 +150,17 @@ fi
 [[ "$DB_USER" =~ ^[a-zA-Z0-9_-]+$ ]] ||
     die "DB_USER invalide."
 
-[[ "$HOST" =~ ^[a-zA-Z0-9.:_-]+$ ]] || die "HOST invalide."
+[[ "$HOST" =~ ^[a-zA-Z0-9.:_-]+$ ]] ||
+    die "HOST invalide."
+
 [[ "$PORT" =~ ^[0-9]+$ ]] || die "PORT invalide."
 (( PORT >= 1 && PORT <= 65535 )) || die "PORT invalide."
-[[ "$HEALTH_RETRIES" =~ ^[0-9]+$ ]] || die "HEALTH_RETRIES invalide."
-[[ "$HEALTH_INTERVAL" =~ ^[0-9]+$ ]] || die "HEALTH_INTERVAL invalide."
+
+[[ "$HEALTH_RETRIES" =~ ^[0-9]+$ ]] ||
+    die "HEALTH_RETRIES invalide."
+
+[[ "$HEALTH_INTERVAL" =~ ^[0-9]+$ ]] ||
+    die "HEALTH_INTERVAL invalide."
 
 [[ "$INSTALL_DIR" == /* && "$DATA_DIR" == /* ]] ||
     die "INSTALL_DIR et DATA_DIR doivent être absolus."
@@ -84,10 +177,21 @@ fi
 [[ "$INSTALL_DIR" != "$ROOT" ]] ||
     die "INSTALL_DIR ne doit pas être le dépôt source."
 
-[[ -f "$ENGINE/Cargo.toml" ]] || die "engine/Cargo.toml introuvable."
-[[ -f "$API/pyproject.toml" ]] || die "api/pyproject.toml introuvable."
-[[ -f "$API/src/main.py" ]] || die "api/src/main.py introuvable."
-[[ -f "$FRONTEND/index.html" ]] || die "frontend/index.html introuvable."
+[[ -f "$ENGINE/Cargo.toml" ]] ||
+    die "engine/Cargo.toml introuvable."
+
+[[ -f "$API/pyproject.toml" ]] ||
+    die "api/pyproject.toml introuvable."
+
+[[ -f "$API/src/main.py" ]] ||
+    die "api/src/main.py introuvable."
+
+[[ -f "$FRONTEND/index.html" ]] ||
+    die "frontend/index.html introuvable."
+
+# Valide l'URL avant de commencer les opérations de déploiement.
+DATABASE_PASSWORD=""
+read_database_password
 
 sudo systemctl is-active --quiet postgresql ||
     die "PostgreSQL est arrêté : lance ./scripts/deploy.sh."
@@ -110,7 +214,8 @@ shopt -s nullglob
 wheels=("$WHEELS"/*.whl)
 shopt -u nullglob
 
-((${#wheels[@]} > 0)) || die "Aucun wheel Rust généré."
+((${#wheels[@]} > 0)) ||
+    die "Aucun wheel Rust généré."
 
 echo "==> [2/8] Préparation des fichiers..."
 
@@ -168,28 +273,46 @@ done
 
 echo "==> [4/8] Vérification de PostgreSQL..."
 
+# Crée le rôle s'il n'existe pas encore.
 if ! sudo -u postgres psql -tAc \
     "SELECT 1 FROM pg_roles WHERE rolname = '$DB_USER'" |
     grep -q 1
 then
-    sudo -u postgres psql -v ON_ERROR_STOP=1 \
-        -c "CREATE ROLE \"$DB_USER\" LOGIN;"
+    sudo -u postgres psql \
+        --set=ON_ERROR_STOP=1 \
+        --command="CREATE ROLE \"$DB_USER\" LOGIN;"
 fi
 
+# Synchronise le mot de passe du rôle avec DATABASE_URL.
+# Les apostrophes sont doublées conformément à la syntaxe SQL.
+# Le mot de passe n'est pas passé dans les arguments de psql.
+DATABASE_PASSWORD_SQL="$(
+    printf '%s' "$DATABASE_PASSWORD" | sed "s/'/''/g"
+)" || die "Impossible de préparer le mot de passe PostgreSQL."
+
+sudo -u postgres psql \
+    --set=ON_ERROR_STOP=1 <<SQL
+ALTER ROLE "$DB_USER" WITH LOGIN PASSWORD '$DATABASE_PASSWORD_SQL';
+SQL
+
+unset DATABASE_PASSWORD DATABASE_PASSWORD_SQL
+
+# Crée la base si nécessaire.
 if ! sudo -u postgres psql -tAc \
     "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" |
     grep -q 1
 then
-    sudo -u postgres createdb --owner="$DB_USER" "$DB_NAME"
+    sudo -u postgres createdb \
+        --owner="$DB_USER" \
+        "$DB_NAME"
 fi
 
+# Assure au rôle applicatif la propriété de la base et du schéma public.
 sudo -u postgres psql \
     --dbname="$DB_NAME" \
     --set=ON_ERROR_STOP=1 \
+    --command="ALTER DATABASE \"$DB_NAME\" OWNER TO \"$DB_USER\";" \
     --command="ALTER SCHEMA public OWNER TO \"$DB_USER\";"
-
-[[ "$SERVICE_NAME" == "$DB_USER" ]] ||
-    die "SERVICE_NAME et DB_USER doivent être identiques pour l'authentification peer."
 
 echo "==> [5/8] Application des migrations SQL..."
 
@@ -203,7 +326,8 @@ sudo -u postgres psql \
     );"
 
 migration_files=("$MIGRATIONS"/*.sql)
-((${#migration_files[@]} > 0)) || die "Aucune migration SQL trouvée."
+((${#migration_files[@]} > 0)) ||
+    die "Aucune migration SQL trouvée."
 
 for migration in "${migration_files[@]}"; do
     [[ -f "$migration" ]] || continue
@@ -229,17 +353,18 @@ for migration in "${migration_files[@]}"; do
     fi
 
     echo "    Application : $filename"
-    
+
     migration_tmp="$(mktemp)"
+
     {
         echo "BEGIN;"
         cat "$migration"
         printf "\nINSERT INTO public.schema_migrations (version) VALUES ('%s');\n" "$version"
         echo "COMMIT;"
     } > "$migration_tmp"
-    
+
     chmod 644 "$migration_tmp"
-    
+
     if ! sudo -u postgres psql \
         --dbname="$DB_NAME" \
         --set=ON_ERROR_STOP=1 \
@@ -249,9 +374,8 @@ for migration in "${migration_files[@]}"; do
         rm -f "$migration_tmp"
         die "Échec de la migration $filename."
     fi
-    
-    rm -f "$migration_tmp"
 
+    rm -f "$migration_tmp"
 done
 
 echo "==> [6/8] Installation de la nouvelle version..."
@@ -284,7 +408,10 @@ rollback() {
 
 echo "==> [7/8] Installation des dépendances..."
 
-if ! sudo "$UV_BIN" sync --project "$INSTALL_DIR/api" --no-dev; then
+if ! sudo "$UV_BIN" sync \
+    --project "$INSTALL_DIR/api" \
+    --no-dev
+then
     rollback
     die "Échec de uv sync."
 fi
@@ -305,6 +432,14 @@ then
 fi
 
 echo "==> [8/8] Configuration et démarrage du backend..."
+
+sudo install -d \
+    -o root -g root -m 700 \
+    "$(dirname "$ENV_DEST")"
+
+sudo install \
+    -o root -g root -m 600 \
+    "$ENV_FILE" "$ENV_DEST"
 
 SERVICE_TMP="$(mktemp)"
 

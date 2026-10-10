@@ -39,24 +39,59 @@ sudo apt-get install -y \
 
 echo "=== Installation / vérification de Rust ==="
 
-if ! command -v rustup >/dev/null 2>&1; then
-    if ! command -v rustc >/dev/null 2>&1; then
-        curl --proto '=https' --tlsv1.2 -sSf \
-            https://sh.rustup.rs | sh -s -- -y
-    else
-        echo "Rust est installé sans rustup."
-        echo "Installe rustup manuellement pour gérer sa version."
-        exit 1
-    fi
-fi
-
+# Charge l'environnement rustup s'il existe.
 if [[ -f "$HOME/.cargo/env" ]]; then
     # shellcheck source=/dev/null
     source "$HOME/.cargo/env"
 fi
 
-rustup toolchain install stable
-rustup default stable
+# Si Rust et Cargo fonctionnent déjà, ne touche pas à leur installation.
+if command -v rustc >/dev/null 2>&1 &&
+   command -v cargo >/dev/null 2>&1; then
+
+    echo "Rust et Cargo sont déjà installés."
+    echo "Aucune mise à jour automatique ne sera effectuée."
+
+else
+    # Installer rustup uniquement si nécessaire.
+    if ! command -v rustup >/dev/null 2>&1; then
+        if command -v rustc >/dev/null 2>&1 ||
+           command -v cargo >/dev/null 2>&1; then
+            echo "Erreur : installation Rust incomplète." >&2
+            echo "Rust ou Cargo est présent, mais pas les deux." >&2
+            exit 1
+        fi
+
+        curl --proto '=https' --tlsv1.2 -sSf \
+            https://sh.rustup.rs | sh -s -- -y
+
+        [[ -f "$HOME/.cargo/env" ]] || {
+            echo "Erreur : environnement rustup introuvable." >&2
+            exit 1
+        }
+
+        # shellcheck source=/dev/null
+        source "$HOME/.cargo/env"
+    fi
+
+    # Installer stable uniquement si aucune toolchain stable n'existe.
+    if ! rustup toolchain list | grep -Eq '^stable(-[^ ]+)?[[:space:]]'; then
+        rustup toolchain install stable --profile minimal
+    fi
+
+    rustup default stable
+fi
+
+# Vérifier que les outils sont réellement utilisables.
+command -v rustc >/dev/null 2>&1 || {
+    echo "Erreur : rustc reste introuvable." >&2
+    exit 1
+}
+
+command -v cargo >/dev/null 2>&1 || {
+    echo "Erreur : cargo reste introuvable." >&2
+    exit 1
+}
 
 rustc --version
 cargo --version

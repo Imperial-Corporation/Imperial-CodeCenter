@@ -214,3 +214,8 @@ $RECYCLE.BIN/
 *.local.*
 config.local.*
 settings.local.*
+
+# ----------------------------
+# Environnement secrets
+# ----------------------------
+*.env

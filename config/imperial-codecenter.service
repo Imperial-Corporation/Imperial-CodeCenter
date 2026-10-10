@@ -27,5 +27,7 @@ ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=@DATA_DIR@
 
+EnvironmentFile=/etc/imperial-codecenter/.env
+
 [Install]
 WantedBy=multi-user.target
