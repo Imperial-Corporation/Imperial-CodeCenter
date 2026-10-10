@@ -1,0 +1,31 @@
+[Unit]
+Description=Imperial CodeCenter API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=@SERVICE_NAME@
+Group=@SERVICE_NAME@
+WorkingDirectory=@INSTALL_DIR@
+
+Environment=PYTHONUNBUFFERED=1
+Environment=CODECENTER_DATA_DIR=@DATA_DIR@
+Environment=CODECENTER_CODE_DIR=@DATA_DIR@/codes
+Environment=PGDATABASE=@DB_NAME@
+Environment=PGUSER=@DB_USER@
+
+ExecStart=@INSTALL_DIR@/api/.venv/bin/uvicorn --app-dir @INSTALL_DIR@/api/src main:app --host @HOST@ --port @PORT@
+
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=@DATA_DIR@
+
+[Install]
+WantedBy=multi-user.target
