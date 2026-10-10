@@ -139,6 +139,15 @@ sudo install -d -o "$SERVICE_NAME" -g "$SERVICE_NAME" -m 750 \
     "$DATA_DIR/cache" \
     "$DATA_DIR/tmp"
 
+# Corrige les permissions de tous les fichiers déjà indexables.
+sudo chown -R "$SERVICE_NAME:$SERVICE_NAME" "$WATCH_PATH"
+
+# Les dossiers doivent être traversables par le service.
+sudo find "$WATCH_PATH" -type d -exec chmod 750 {} +
+
+# Le service peut lire les fichiers sans les rendre exécutables.
+sudo find "$WATCH_PATH" -type f -exec chmod 640 {} +
+
 sudo install -o root -g root -m 600 "$BUILD_DIR/.env" "$ENV_DEST"
 
 echo "==> [3/8] Construction du moteur Rust..."
@@ -200,8 +209,6 @@ PYTHON="$API_DIR/.venv/bin/python"
 PYTHON="$API_DIR/.venv/bin/python"
 [[ -x "$PYTHON" ]] || die "Environnement Python de production absent."
 
-"$UV_BIN" pip install --python "$PYTHON" "$WHEEL"
-
 sudo chown -R "$SERVICE_NAME:$SERVICE_NAME" "$STAGING_DIR"
 sudo chmod -R u+rwX,go+rX "$STAGING_DIR"
 
@@ -219,6 +226,8 @@ sudo -u "$SERVICE_NAME" psql \
 echo "==> [6/8] Application des migrations disponibles..."
 
 MIGRATION_DIRS=()
+[[ -d "$ROOT/config/database/migrations" ]] &&
+    MIGRATION_DIRS+=("$ROOT/config/database/migrations")
 [[ -d "$ROOT/engine/src/database/migrations" ]] &&
     MIGRATION_DIRS+=("$ROOT/engine/src/database/migrations")
 [[ -d "$ROOT/migrations" ]] &&
@@ -243,8 +252,9 @@ SQL
                 sudo -u "$SERVICE_NAME" psql \
                     --dbname="$DB_NAME" \
                     --tuples-only --no-align \
-                    --set=filename="$filename" \
-                    --command="SELECT 1 FROM codecenter_schema_migrations WHERE filename = :'filename';"
+                    --command="SELECT 1 FROM codecenter_schema_migrations WHERE filename = '$(
+                        printf '%s' "$filename" | sed "s/'/''/g"
+                    )';"
             )"
 
             [[ "$already_applied" == "1" ]] && continue
@@ -257,11 +267,12 @@ SQL
                 --single-transaction \
                 --file="$migration"
 
+            escaped_filename="$(printf '%s' "$filename" | sed "s/'/''/g")"
+
             sudo -u "$SERVICE_NAME" psql \
                 --dbname="$DB_NAME" \
                 --set=ON_ERROR_STOP=1 \
-                --set=filename="$filename" \
-                --command="INSERT INTO codecenter_schema_migrations (filename) VALUES (:'filename');"
+                --command="INSERT INTO codecenter_schema_migrations (filename) VALUES ('$escaped_filename');"
         done < <(
             find "$directory" -maxdepth 1 -type f -name '*.sql' -print0 |
                 sort -z

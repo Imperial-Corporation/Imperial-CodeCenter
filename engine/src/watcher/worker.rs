@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::time::Duration;
 
 use crate::database::documents::remove_document_by_path;
 use crate::indexing::document::{index_file, is_supported_file};
@@ -11,12 +12,13 @@ pub async fn process_action(
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     match action {
         FileAction::Upsert(path) => {
-            // Un événement peut arriver avant que le fichier soit entièrement écrit.
-            // S'il existe et qu'il est pris en charge, on tente de l'indexer.
             if path.is_file() && is_supported_file(&path) {
                 match index_file(&path).await {
                     Ok(true) => {
-                        println!("CodeCenter : document actualisé : {}", path.display());
+                        println!(
+                            "CodeCenter : document indexé ou actualisé : {}",
+                            path.display()
+                        );
                     }
                     Ok(false) => {}
                     Err(error) => {
@@ -29,25 +31,42 @@ pub async fn process_action(
                     }
                 }
             } else if !path.exists() {
-                // Le fichier a pu être supprimé avant le traitement de l'événement.
-                remove_path(&path).await?;
+                schedule_removal(path);
             }
         }
 
         FileAction::Remove(path) => {
-            remove_path(&path).await?;
+            schedule_removal(path);
         }
     }
 
     Ok(())
 }
 
-/// Supprime l'entrée PostgreSQL associée à un chemin.
+/// Diffère la suppression pour laisser le temps à l'événement de
+/// création ou de déplacement d'actualiser le chemin en base.
+fn schedule_removal(path: PathBuf) {
+    tokio::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(1200)).await;
+
+        if path.exists() {
+            return;
+        }
+
+        if let Err(error) = remove_path(&path).await {
+            eprintln!(
+                "CodeCenter : impossible de supprimer l'entrée {} : {}",
+                path.display(),
+                error
+            );
+        }
+    });
+}
+
+/// Supprime l'entrée PostgreSQL associée à un ancien chemin.
 async fn remove_path(
     path: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
-    // Un chemin supprimé ne peut plus être canonisé. Le chemin transmis
-    // doit donc correspondre à celui enregistré avant la suppression.
     let storage_path = path.to_string_lossy().into_owned();
 
     if remove_document_by_path(&storage_path).await? {
