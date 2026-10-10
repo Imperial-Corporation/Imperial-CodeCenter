@@ -4,50 +4,62 @@ set -Eeuo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 ENGINE="$ROOT/engine"
 API="$ROOT/api"
-WHEELS="$ENGINE/target/wheels"
+ENV_FILE="$ROOT/config/.env"
 
-echo "==> [1/4] Compilation du moteur Rust..."
+die() {
+    echo "Erreur : $*" >&2
+    exit 1
+}
 
-mkdir -p "$WHEELS"
-rm -f "$WHEELS"/*.whl
+[[ $EUID -ne 0 ]] || die "Lance ce script sans sudo."
+[[ -f "$ENGINE/Cargo.toml" ]] || die "engine/Cargo.toml introuvable."
+[[ -f "$API/pyproject.toml" ]] || die "api/pyproject.toml introuvable."
+[[ -f "$API/src/main.py" ]] || die "api/src/main.py introuvable."
+[[ -f "$ENV_FILE" ]] || die "config/.env introuvable."
+
+if command -v uv >/dev/null 2>&1; then
+    UV_BIN="$(command -v uv)"
+elif [[ -x "$HOME/.local/bin/uv" ]]; then
+    UV_BIN="$HOME/.local/bin/uv"
+else
+    die "uv est introuvable. Lance d'abord ./scripts/deploy.sh."
+fi
+
+command -v cargo >/dev/null 2>&1 || die "cargo est introuvable."
+command -v rustc >/dev/null 2>&1 || die "rustc est introuvable."
+
+echo "=== Imperial CodeCenter : mode développement ==="
+
+echo "==> [1/3] Préparation de l'environnement Python..."
+
+"$UV_BIN" sync --project "$API"
+
+PYTHON="$API/.venv/bin/python"
+[[ -x "$PYTHON" ]] || die "L'environnement Python de l'API est introuvable."
+
+echo "==> [2/3] Compilation et installation du moteur Rust..."
 
 (
     cd "$ENGINE"
-    uv run --with maturin maturin build \
-        --release \
-        --out "$WHEELS"
+    "$UV_BIN" run --with maturin maturin develop \
+        --manifest-path "$ENGINE/Cargo.toml" \
+        --python "$PYTHON"
 )
 
-wheels=("$WHEELS"/*.whl)
+echo "==> [3/3] Démarrage de l'API en mode développement..."
 
-if [[ ! -f "${wheels[0]}" ]]; then
-    echo "ERREUR : aucun wheel Rust n'a été généré."
-    exit 1
-fi
+echo "API : http://127.0.0.1:8000"
+echo "Documentation : http://127.0.0.1:8000/docs"
+echo "Arrêt : Ctrl+C"
+echo
 
-echo "==> [2/4] Préparation de l'environnement Python..."
+cd "$ROOT"
 
-uv sync --project "$API"
-
-echo "==> [3/4] Installation du moteur Rust..."
-
-uv pip install \
-    --python "$API/.venv/bin/python" \
-    "${wheels[@]}"
-
-echo "==> [4/4] Vérification du module..."
-
-"$API/.venv/bin/python" -c \
-    "import codecenter_engine; print(codecenter_engine.healt())"
-
-echo "==> Démarrage d'Imperial CodeCenter..."
-
-exec uv run \
+exec "$UV_BIN" run \
     --project "$API" \
-    --no-sync \
-    -- \
-    "$API/.venv/bin/uvicorn" \
+    --env-file "$ENV_FILE" \
+    uvicorn main:app \
     --app-dir "$API/src" \
-    main:app \
+    --reload \
     --host 127.0.0.1 \
     --port 8000

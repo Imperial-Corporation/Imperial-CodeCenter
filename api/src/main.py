@@ -1,5 +1,6 @@
 import json
 import logging
+from contextlib import asynccontextmanager
 from pathlib import Path
 
 from fastapi import (
@@ -14,7 +15,12 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
-from codecenter_engine import get_stats, healt
+from codecenter_engine import (
+    get_stats,
+    healt,
+    start_watcher,
+    stop_watcher,
+)
 
 # --------------------------------------------------
 # Configuration
@@ -25,10 +31,34 @@ FRONTEND = ROOT / "frontend"
 
 logger = logging.getLogger(__name__)
 
+
+# --------------------------------------------------
+# Cycle de vie de l'application
+# --------------------------------------------------
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """Démarre et arrête les services du moteur avec l'API."""
+    logger.info("Démarrage du watcher CodeCenter")
+
+    start_watcher()
+
+    try:
+        yield
+    finally:
+        logger.info("Arrêt du watcher CodeCenter")
+
+        try:
+            stop_watcher()
+        except Exception:
+            logger.exception("Échec de l'arrêt du watcher")
+
+
 app = FastAPI(
     title="Imperial CodeCenter API",
     version="0.1.0",
     description="API locale du moteur Imperial CodeCenter.",
+    lifespan=lifespan,
 )
 
 app.mount(
@@ -100,7 +130,9 @@ def get_statistics() -> dict:
     try:
         return json.loads(get_stats())
     except Exception as exc:
-        logger.exception("Échec de récupération des statistiques Rust/PostgreSQL")
+        logger.exception(
+            "Échec de récupération des statistiques Rust/PostgreSQL"
+        )
         raise HTTPException(
             status_code=503,
             detail="Impossible de récupérer les statistiques du moteur.",

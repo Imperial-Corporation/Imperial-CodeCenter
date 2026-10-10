@@ -5,6 +5,7 @@ use sqlx::postgres::{PgPool, PgPoolOptions};
 use tokio::runtime::Runtime;
 
 pub mod stats;
+pub mod documents;
 
 static DATABASE: OnceLock<PgPool> = OnceLock::new();
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
@@ -48,6 +49,12 @@ pub fn pool() -> Result<&'static PgPool, sqlx::Error> {
             .into(),
         )
     })
+}
+
+/// Initialise PostgreSQL si nécessaire et retourne le pool partagé.
+pub async fn get_pool() -> Result<&'static PgPool, sqlx::Error> {
+    initialize().await?;
+    pool()
 }
 
 /// Récupère les statistiques et les sérialise en JSON pour Python.

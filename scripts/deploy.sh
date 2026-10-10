@@ -4,31 +4,55 @@ set -Eeuo pipefail
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT/config/deploy.conf"
 
-if [[ $EUID -eq 0 ]]; then
-    echo "Erreur : lance ce script sans sudo."
-    exit 1
-fi
-
-[[ -f "$CONFIG" ]] || {
-    echo "Erreur : config/deploy.conf introuvable."
+die() {
+    echo "Erreur : $*" >&2
     exit 1
 }
+
+[[ $EUID -ne 0 ]] || die "Lance ce script sans sudo."
+command -v sudo >/dev/null 2>&1 || die "sudo est requis."
+[[ -f "$CONFIG" ]] || die "config/deploy.conf introuvable."
 
 # shellcheck source=/dev/null
 source "$CONFIG"
 
-if ! command -v apt-get >/dev/null 2>&1; then
-    echo "Erreur : ce script nécessite Ubuntu ou Debian."
-    exit 1
-fi
+[[ "${SERVICE_NAME:-}" =~ ^[a-zA-Z0-9_-]+$ ]] ||
+    die "SERVICE_NAME absent ou invalide."
+
+[[ "${INSTALL_DIR:-}" == /* ]] ||
+    die "INSTALL_DIR doit être un chemin absolu."
+
+[[ "${DATA_DIR:-}" == /* ]] ||
+    die "DATA_DIR doit être un chemin absolu."
+
+[[ "$INSTALL_DIR" != "/" && "$DATA_DIR" != "/" ]] ||
+    die "Un répertoire racine ne peut pas être utilisé."
+
+[[ "$INSTALL_DIR" != "$ROOT" ]] ||
+    die "INSTALL_DIR ne doit pas pointer vers le dépôt source."
+
+[[ "$INSTALL_DIR" != "$DATA_DIR" ]] ||
+    die "INSTALL_DIR et DATA_DIR doivent être distincts."
+
+DB_NAME="${DB_NAME:-imperial_codecenter}"
+DB_USER="${DB_USER:-$SERVICE_NAME}"
+
+[[ "$DB_NAME" =~ ^[a-zA-Z0-9_-]+$ ]] ||
+    die "DB_NAME invalide."
+
+[[ "$DB_USER" =~ ^[a-zA-Z0-9_-]+$ ]] ||
+    die "DB_USER invalide."
 
 echo "=== Imperial CodeCenter : préparation du serveur ==="
+
+echo "==> [1/6] Installation des dépendances système..."
 
 sudo apt-get update
 sudo apt-get install -y \
     build-essential \
     ca-certificates \
     curl \
+    git \
     libssl-dev \
     pkg-config \
     postgresql \
@@ -37,93 +61,93 @@ sudo apt-get install -y \
     python3-dev \
     python3-venv
 
-echo "=== Installation / vérification de Rust ==="
+echo "==> [2/6] Installation de Rust si nécessaire..."
 
-# Charge l'environnement rustup s'il existe.
-if [[ -f "$HOME/.cargo/env" ]]; then
-    # shellcheck source=/dev/null
-    source "$HOME/.cargo/env"
-fi
-
-# Si Rust et Cargo fonctionnent déjà, ne touche pas à leur installation.
-if command -v rustc >/dev/null 2>&1 &&
-   command -v cargo >/dev/null 2>&1; then
-
-    echo "Rust et Cargo sont déjà installés."
-    echo "Aucune mise à jour automatique ne sera effectuée."
-
-else
-    # Installer rustup uniquement si nécessaire.
-    if ! command -v rustup >/dev/null 2>&1; then
-        if command -v rustc >/dev/null 2>&1 ||
-           command -v cargo >/dev/null 2>&1; then
-            echo "Erreur : installation Rust incomplète." >&2
-            echo "Rust ou Cargo est présent, mais pas les deux." >&2
-            exit 1
-        fi
-
+if ! command -v cargo >/dev/null 2>&1; then
+    if [[ -x "$HOME/.cargo/bin/rustup" ]]; then
+        "$HOME/.cargo/bin/rustup" toolchain install stable
+        "$HOME/.cargo/bin/rustup" default stable
+    else
         curl --proto '=https' --tlsv1.2 -sSf \
-            https://sh.rustup.rs | sh -s -- -y
-
-        [[ -f "$HOME/.cargo/env" ]] || {
-            echo "Erreur : environnement rustup introuvable." >&2
-            exit 1
-        }
-
-        # shellcheck source=/dev/null
-        source "$HOME/.cargo/env"
+            https://sh.rustup.rs |
+            sh -s -- -y --profile minimal
     fi
-
-    # Installer stable uniquement si aucune toolchain stable n'existe.
-    if ! rustup toolchain list | grep -Eq '^stable(-[^ ]+)?[[:space:]]'; then
-        rustup toolchain install stable --profile minimal
-    fi
-
-    rustup default stable
 fi
 
-# Vérifier que les outils sont réellement utilisables.
-command -v rustc >/dev/null 2>&1 || {
-    echo "Erreur : rustc reste introuvable." >&2
-    exit 1
-}
+export PATH="$HOME/.cargo/bin:$PATH"
 
-command -v cargo >/dev/null 2>&1 || {
-    echo "Erreur : cargo reste introuvable." >&2
-    exit 1
-}
+command -v cargo >/dev/null 2>&1 ||
+    die "Installation de Cargo échouée."
 
-rustc --version
-cargo --version
-
-echo "=== Installation / vérification de uv ==="
+echo "==> [3/6] Installation de uv si nécessaire..."
 
 if ! command -v uv >/dev/null 2>&1; then
     if [[ -x "$HOME/.local/bin/uv" ]]; then
         export PATH="$HOME/.local/bin:$PATH"
     else
-        curl --proto '=https' --tlsv1.2 -sSf \
-            https://astral.sh/uv/install.sh | sh
-        export PATH="$HOME/.local/bin:$PATH"
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        export PATH="$HOME/.local/bin:$HOME/.cargo/bin:$PATH"
     fi
 fi
 
-command -v uv >/dev/null || {
-    echo "Erreur : uv est introuvable après l'installation."
-    exit 1
-}
+command -v uv >/dev/null 2>&1 ||
+    die "Installation de uv échouée."
 
-uv --version
+echo "==> [4/6] Préparation du compte de service..."
 
-echo "=== Préparation de PostgreSQL ==="
+if ! id "$SERVICE_NAME" >/dev/null 2>&1; then
+    sudo useradd \
+        --system \
+        --home-dir "$DATA_DIR" \
+        --no-create-home \
+        --shell /usr/sbin/nologin \
+        "$SERVICE_NAME"
+fi
+
+echo "==> [5/6] Préparation des répertoires..."
+
+sudo install -d -o "$SERVICE_NAME" -g "$SERVICE_NAME" -m 750 \
+    "$INSTALL_DIR" \
+    "$DATA_DIR" \
+    "$DATA_DIR/codes" \
+    "$DATA_DIR/imports" \
+    "$DATA_DIR/cache" \
+    "$DATA_DIR/tmp"
+
+sudo install -d -o root -g root -m 755 \
+    "$(dirname "$INSTALL_DIR")"
+
+echo "==> [6/6] Préparation de PostgreSQL..."
 
 sudo systemctl enable --now postgresql
 
-sudo systemctl is-active --quiet postgresql || {
-    echo "Erreur : PostgreSQL n'est pas actif."
-    exit 1
-}
+sudo -u postgres psql \
+    --set=ON_ERROR_STOP=1 \
+    --set=db_user="$DB_USER" \
+    --set=db_name="$DB_NAME" <<'SQL'
+SELECT format('CREATE ROLE %I LOGIN', :'db_user')
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_roles WHERE rolname = :'db_user'
+)
+\gexec
 
+SELECT format(
+    'CREATE DATABASE %I OWNER %I',
+    :'db_name',
+    :'db_user'
+)
+WHERE NOT EXISTS (
+    SELECT 1 FROM pg_database WHERE datname = :'db_name'
+)
+\gexec
+SQL
+
+echo
 echo "Préparation terminée."
-echo "Aucune base n'a été supprimée ou réinitialisée."
-echo "Prochaine étape : ./scripts/release.sh"
+echo "Compte de service : $SERVICE_NAME"
+echo "Répertoire d'installation : $INSTALL_DIR"
+echo "Répertoire de données : $DATA_DIR"
+echo "Base PostgreSQL : $DB_NAME"
+echo "Rôle PostgreSQL : $DB_USER"
+echo
+echo "Prochaine étape : configurer config/.env puis lancer release.sh."

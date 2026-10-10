@@ -3,487 +3,339 @@ set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG="$ROOT/config/deploy.conf"
-SERVICE_TEMPLATE="$ROOT/config/imperial-codecenter.service"
-MIGRATIONS="$ROOT/config/database/migrations"
-ENV_FILE="$ROOT/config/.env"
+ENV_SOURCE="$ROOT/config/.env"
 
-[[ -f "$CONFIG" ]] || {
-    echo "Erreur : config/deploy.conf introuvable." >&2
+die() {
+    echo "Erreur : $*" >&2
     exit 1
 }
+
+[[ $EUID -ne 0 ]] || die "Lance ce script sans sudo."
+command -v sudo >/dev/null 2>&1 || die "sudo est requis."
+command -v cargo >/dev/null 2>&1 || die "cargo est introuvable."
+command -v python3 >/dev/null 2>&1 || die "python3 est introuvable."
+command -v psql >/dev/null 2>&1 || die "psql est introuvable."
+[[ -f "$CONFIG" ]] || die "config/deploy.conf introuvable."
+[[ -f "$ENV_SOURCE" ]] || die "config/.env introuvable."
+[[ -f "$ROOT/engine/Cargo.toml" ]] || die "Cargo.toml introuvable."
+[[ -f "$ROOT/api/pyproject.toml" ]] || die "api/pyproject.toml introuvable."
+[[ -f "$ROOT/api/src/main.py" ]] || die "api/src/main.py introuvable."
 
 # shellcheck source=/dev/null
 source "$CONFIG"
 
-ENV_DEST="/etc/${SERVICE_NAME}/.env"
+[[ "${SERVICE_NAME:-}" =~ ^[a-zA-Z0-9_-]+$ ]] ||
+    die "SERVICE_NAME absent ou invalide."
 
-[[ -f "$SERVICE_TEMPLATE" ]] || {
-    echo "Erreur : modèle systemd introuvable." >&2
-    exit 1
-}
+[[ "${INSTALL_DIR:-}" == /* ]] ||
+    die "INSTALL_DIR doit être un chemin absolu."
 
-[[ -d "$MIGRATIONS" ]] || {
-    echo "Erreur : dossier des migrations SQL introuvable." >&2
-    exit 1
-}
-
-[[ -f "$ENV_FILE" ]] || {
-    echo "Erreur : config/.env introuvable." >&2
-    exit 1
-}
-
-[[ ! -L "$ENV_FILE" ]] || {
-    echo "Erreur : config/.env ne doit pas être un lien symbolique." >&2
-    exit 1
-}
-
-ENGINE="$ROOT/engine"
-API="$ROOT/api"
-FRONTEND="$ROOT/frontend"
-WHEELS="$ENGINE/target/wheels"
-
-STAGING_DIR="${INSTALL_DIR}.staging"
-BACKUP_DIR="${INSTALL_DIR}.previous"
-SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
-
-die() {
-    echo "ERREUR : $*" >&2
-    exit 1
-}
-
-# Lit DATABASE_URL et extrait le mot de passe PostgreSQL.
-# Python sert uniquement à analyser correctement l'URL et ses encodages.
-# Le mot de passe n'est jamais affiché dans les logs.
-read_database_password() {
-    local encoded_password
-
-    encoded_password="$(
-        python3 - "$ENV_FILE" "$DB_USER" "$DB_NAME" <<'PY'
-import base64
-import sys
-from pathlib import Path
-from urllib.parse import unquote, urlsplit
-
-env_file, expected_user, expected_database = sys.argv[1:]
-
-value = None
-
-for line in Path(env_file).read_text(encoding="utf-8").splitlines():
-    line = line.strip()
-
-    if not line or line.startswith("#"):
-        continue
-
-    if line.startswith("DATABASE_URL="):
-        value = line.split("=", 1)[1].strip()
-
-        if (
-            len(value) >= 2
-            and value[0] == value[-1]
-            and value[0] in ("'", '"')
-        ):
-            value = value[1:-1]
-
-        break
-
-if not value:
-    sys.exit("DATABASE_URL absente de config/.env")
-
-try:
-    url = urlsplit(value)
-    username = unquote(url.username or "")
-    password = url.password
-    database = unquote(url.path.lstrip("/"))
-except (ValueError, UnicodeError):
-    sys.exit("DATABASE_URL invalide")
-
-if url.scheme not in ("postgresql", "postgres"):
-    sys.exit("DATABASE_URL doit utiliser PostgreSQL")
-
-if username != expected_user:
-    sys.exit("L'utilisateur de DATABASE_URL ne correspond pas à DB_USER")
-
-if database != expected_database:
-    sys.exit("La base de DATABASE_URL ne correspond pas à DB_NAME")
-
-if password is None or password == "":
-    sys.exit("DATABASE_URL doit contenir un mot de passe")
-
-# Base64 évite que les caractères spéciaux du mot de passe
-# soient interprétés par le shell pendant le transfert.
-print(base64.b64encode(unquote(password).encode("utf-8")).decode("ascii"))
-PY
-    )" || die "Impossible de lire ou de valider DATABASE_URL."
-
-    DATABASE_PASSWORD="$(
-        printf '%s' "$encoded_password" | base64 --decode
-    )" || die "Impossible de décoder le mot de passe PostgreSQL."
-
-    [[ -n "$DATABASE_PASSWORD" ]] ||
-        die "Le mot de passe PostgreSQL est vide."
-}
-
-[[ $EUID -ne 0 ]] || die "Lance ce script sans sudo."
-
-command -v sudo >/dev/null || die "sudo est requis."
-command -v curl >/dev/null || die "curl est requis."
-command -v psql >/dev/null || die "psql est absent : lance deploy.sh."
-command -v systemctl >/dev/null || die "systemd est requis."
-command -v cargo >/dev/null || die "Rust est absent : lance deploy.sh."
-command -v rustc >/dev/null || die "rustc est absent : lance deploy.sh."
-command -v python3 >/dev/null || die "python3 est requis."
-
-if command -v uv >/dev/null 2>&1; then
-    UV_BIN="$(command -v uv)"
-elif [[ -x "$HOME/.local/bin/uv" ]]; then
-    UV_BIN="$HOME/.local/bin/uv"
-else
-    die "uv est absent : lance ./scripts/deploy.sh."
-fi
-
-[[ "$SERVICE_NAME" =~ ^[a-zA-Z0-9_-]+$ ]] ||
-    die "SERVICE_NAME invalide."
-
-[[ "$DB_NAME" =~ ^[a-zA-Z0-9_]+$ ]] ||
-    die "DB_NAME invalide."
-
-[[ "$DB_USER" =~ ^[a-zA-Z0-9_-]+$ ]] ||
-    die "DB_USER invalide."
-
-[[ "$HOST" =~ ^[a-zA-Z0-9.:_-]+$ ]] ||
-    die "HOST invalide."
-
-[[ "$PORT" =~ ^[0-9]+$ ]] || die "PORT invalide."
-(( PORT >= 1 && PORT <= 65535 )) || die "PORT invalide."
-
-[[ "$HEALTH_RETRIES" =~ ^[0-9]+$ ]] ||
-    die "HEALTH_RETRIES invalide."
-
-[[ "$HEALTH_INTERVAL" =~ ^[0-9]+$ ]] ||
-    die "HEALTH_INTERVAL invalide."
-
-[[ "$INSTALL_DIR" == /* && "$DATA_DIR" == /* ]] ||
-    die "INSTALL_DIR et DATA_DIR doivent être absolus."
+[[ "${DATA_DIR:-}" == /* ]] ||
+    die "DATA_DIR doit être un chemin absolu."
 
 [[ "$INSTALL_DIR" != "/" && "$DATA_DIR" != "/" ]] ||
-    die "Chemin racine interdit."
-
-[[ "$INSTALL_DIR" != *"/../"* && "$DATA_DIR" != *"/../"* ]] ||
-    die "Chemin contenant un segment parent interdit."
-
-[[ "$INSTALL_DIR" != "$DATA_DIR" ]] ||
-    die "L'installation et les données doivent être séparées."
+    die "Un répertoire racine ne peut pas être utilisé."
 
 [[ "$INSTALL_DIR" != "$ROOT" ]] ||
-    die "INSTALL_DIR ne doit pas être le dépôt source."
+    die "INSTALL_DIR pointe vers le dépôt source."
 
-[[ -f "$ENGINE/Cargo.toml" ]] ||
-    die "engine/Cargo.toml introuvable."
+[[ "$INSTALL_DIR" != "$DATA_DIR" ]] ||
+    die "INSTALL_DIR et DATA_DIR doivent être distincts."
 
-[[ -f "$API/pyproject.toml" ]] ||
-    die "api/pyproject.toml introuvable."
+DB_NAME="${DB_NAME:-imperial_codecenter}"
+DB_USER="${DB_USER:-$SERVICE_NAME}"
+API_HOST="${API_HOST:-127.0.0.1}"
+API_PORT="${API_PORT:-8000}"
 
-[[ -f "$API/src/main.py" ]] ||
-    die "api/src/main.py introuvable."
+[[ "$DB_NAME" =~ ^[a-zA-Z0-9_-]+$ ]] ||
+    die "DB_NAME invalide."
 
-[[ -f "$FRONTEND/index.html" ]] ||
-    die "frontend/index.html introuvable."
+[[ "$DB_USER" == "$SERVICE_NAME" ]] ||
+    die "Pour l'authentification PostgreSQL par socket, DB_USER doit être égal à SERVICE_NAME."
 
-# Valide l'URL avant de commencer les opérations de déploiement.
-DATABASE_PASSWORD=""
-read_database_password
+[[ "$API_HOST" =~ ^[a-zA-Z0-9.:_-]+$ ]] ||
+    die "API_HOST invalide."
 
-sudo systemctl is-active --quiet postgresql ||
-    die "PostgreSQL est arrêté : lance ./scripts/deploy.sh."
+[[ "$API_PORT" =~ ^[0-9]+$ ]] &&
+    ((API_PORT >= 1 && API_PORT <= 65535)) ||
+    die "API_PORT invalide."
+
+SERVICE_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
+ENV_DIR="/etc/${SERVICE_NAME}"
+ENV_DEST="$ENV_DIR/.env"
+STAGING_DIR="${INSTALL_DIR}.staging"
+BACKUP_DIR="${INSTALL_DIR}.previous"
+BUILD_DIR="$(mktemp -d)"
+WHEEL_DIR="$BUILD_DIR/wheels"
+WATCH_PATH="$DATA_DIR/codes"
+
+UV_BIN="$(command -v uv || true)"
+if [[ -z "$UV_BIN" && -x "$HOME/.local/bin/uv" ]]; then
+    UV_BIN="$HOME/.local/bin/uv"
+fi
+[[ -n "$UV_BIN" ]] || die "uv est introuvable. Lance d'abord deploy.sh."
+
+cleanup() {
+    rm -rf -- "$BUILD_DIR"
+}
+trap cleanup EXIT
 
 echo "=== Imperial CodeCenter : release ==="
+echo "Installation : $INSTALL_DIR"
+echo "Données : $DATA_DIR"
+echo "Watcher : $WATCH_PATH"
 
-echo "==> [1/8] Compilation du moteur Rust..."
+echo "==> [1/8] Vérification du compte de service..."
 
-mkdir -p "$WHEELS"
-rm -f "$WHEELS"/*.whl
+id "$SERVICE_NAME" >/dev/null 2>&1 ||
+    die "Compte de service absent. Lance d'abord deploy.sh."
 
-(
-    cd "$ENGINE"
-    "$UV_BIN" run --with maturin maturin build \
-        --release \
-        --out "$WHEELS"
-)
+sudo systemctl cat "$SERVICE_NAME" >/dev/null 2>&1 &&
+    sudo systemctl stop "$SERVICE_NAME"
 
-shopt -s nullglob
-wheels=("$WHEELS"/*.whl)
-shopt -u nullglob
+echo "==> [2/8] Préparation de la configuration..."
 
-((${#wheels[@]} > 0)) ||
-    die "Aucun wheel Rust généré."
+sudo install -d -o root -g root -m 700 "$ENV_DIR"
 
-echo "==> [2/8] Préparation des fichiers..."
+python3 - "$ENV_SOURCE" "$BUILD_DIR/.env" "$WATCH_PATH" "$DB_NAME" <<'PY'
+import sys
+from pathlib import Path
 
-sudo rm -rf -- "$STAGING_DIR"
-sudo install -d "$STAGING_DIR/api" "$STAGING_DIR/frontend"
+source, destination, watch_path, db_name = sys.argv[1:]
+lines = Path(source).read_text(encoding="utf-8").splitlines()
 
-sudo install -m 644 \
-    "$API/pyproject.toml" \
-    "$STAGING_DIR/api/pyproject.toml"
+def set_value(key: str, value: str) -> None:
+    prefix = f"{key}="
+    matches = [
+        i for i, line in enumerate(lines)
+        if line.strip().startswith(prefix)
+    ]
 
-sudo cp -a "$API/src" "$STAGING_DIR/api/src"
-sudo cp -a "$FRONTEND/." "$STAGING_DIR/frontend/"
+    replacement = f'{key}="{value}"'
 
-if [[ -f "$API/uv.lock" ]]; then
-    sudo install -m 644 "$API/uv.lock" "$STAGING_DIR/api/uv.lock"
-fi
+    if matches:
+        lines[matches[0]] = replacement
+        for i in reversed(matches[1:]):
+            del lines[i]
+    else:
+        lines.append(replacement)
 
-sudo install -d "$STAGING_DIR/config/database/migrations"
-sudo cp -a "$MIGRATIONS/." "$STAGING_DIR/config/database/migrations/"
-sudo chown -R root:root "$STAGING_DIR"
+set_value("CODECENTER_WATCH_PATHS", watch_path)
 
-echo "==> [3/8] Préparation du stockage..."
+# L'API utilise l'identité Unix du service pour PostgreSQL
+# via le socket local, sans mot de passe dans l'URL.
+if not any(line.strip().startswith("DATABASE_URL=") for line in lines):
+    set_value(
+        "DATABASE_URL",
+        f"postgresql:///{db_name}?host=/var/run/postgresql",
+    )
 
-if ! id "$SERVICE_NAME" >/dev/null 2>&1; then
-    sudo useradd \
-        --system \
-        --home-dir "$DATA_DIR" \
-        --shell /usr/sbin/nologin \
-        "$SERVICE_NAME"
-fi
+Path(destination).write_text("\n".join(lines) + "\n", encoding="utf-8")
+PY
 
-sudo install -d \
-    -o "$SERVICE_NAME" -g "$SERVICE_NAME" \
-    "$DATA_DIR" \
-    "$DATA_DIR/codes" \
+sudo install -d -o "$SERVICE_NAME" -g "$SERVICE_NAME" -m 750 \
+    "$WATCH_PATH" \
     "$DATA_DIR/imports" \
     "$DATA_DIR/cache" \
     "$DATA_DIR/tmp"
 
-for directory in \
-    "algorithms/c" \
-    "algorithms/rust" \
-    "algorithms/python" \
-    "networking/c" \
-    "networking/rust" \
-    "networking/python" \
-    "operating-systems/c" \
-    "operating-systems/rust" \
-    "uncategorized/unknown"
-do
-    sudo install -d \
-        -o "$SERVICE_NAME" -g "$SERVICE_NAME" \
-        "$DATA_DIR/codes/$directory"
-done
+sudo install -o root -g root -m 600 "$BUILD_DIR/.env" "$ENV_DEST"
 
-echo "==> [4/8] Vérification de PostgreSQL..."
+echo "==> [3/8] Construction du moteur Rust..."
 
-# Crée le rôle s'il n'existe pas encore.
-if ! sudo -u postgres psql -tAc \
-    "SELECT 1 FROM pg_roles WHERE rolname = '$DB_USER'" |
-    grep -q 1
-then
-    sudo -u postgres psql \
-        --set=ON_ERROR_STOP=1 \
-        --command="CREATE ROLE \"$DB_USER\" LOGIN;"
+mkdir -p "$WHEEL_DIR"
+
+(
+    cd "$ROOT/engine"
+    "$UV_BIN" run --with maturin maturin build \
+        --release \
+        --manifest-path "$ROOT/engine/Cargo.toml" \
+        --out "$WHEEL_DIR"
+)
+
+WHEEL="$(find "$WHEEL_DIR" -maxdepth 1 -type f -name 'codecenter_engine-*.whl' -print -quit)"
+[[ -n "$WHEEL" ]] || die "Aucun wheel Rust n'a été généré."
+
+echo "==> [4/8] Préparation de la nouvelle version..."
+
+sudo rm -rf -- "$STAGING_DIR"
+sudo mkdir -p "$STAGING_DIR"
+sudo chown "$USER":"$(id -gn)" "$STAGING_DIR"
+
+cp -a "$ROOT/api" "$STAGING_DIR/api"
+
+if [[ -d "$ROOT/frontend" ]]; then
+    cp -a "$ROOT/frontend" "$STAGING_DIR/frontend"
 fi
 
-# Synchronise le mot de passe du rôle avec DATABASE_URL.
-# Les apostrophes sont doublées conformément à la syntaxe SQL.
-# Le mot de passe n'est pas passé dans les arguments de psql.
-DATABASE_PASSWORD_SQL="$(
-    printf '%s' "$DATABASE_PASSWORD" | sed "s/'/''/g"
-)" || die "Impossible de préparer le mot de passe PostgreSQL."
+if [[ -d "$ROOT/docs" ]]; then
+    cp -a "$ROOT/docs" "$STAGING_DIR/docs"
+fi
 
-sudo -u postgres psql \
-    --set=ON_ERROR_STOP=1 <<SQL
-ALTER ROLE "$DB_USER" WITH LOGIN PASSWORD '$DATABASE_PASSWORD_SQL';
+if [[ -d "$ROOT/migrations" ]]; then
+    cp -a "$ROOT/migrations" "$STAGING_DIR/migrations"
+fi
+
+if [[ -d "$ROOT/engine/migrations" ]]; then
+    cp -a "$ROOT/engine/migrations" "$STAGING_DIR/engine-migrations"
+fi
+
+API_DIR="$STAGING_DIR/api"
+
+# Crée un environnement de production indépendant du dossier personnel.
+rm -rf -- "$API_DIR/.venv"
+
+"$UV_BIN" sync \
+    --project "$API_DIR" \
+    --python /usr/bin/python3
+
+PYTHON="$API_DIR/.venv/bin/python"
+[[ -x "$PYTHON" ]] || die "Environnement Python de production absent."
+
+"$UV_BIN" pip install --python "$PYTHON" "$WHEEL"
+
+# Vérifie que le moteur Rust et Uvicorn sont importables.
+"$PYTHON" -c "import uvicorn; import codecenter_engine; print('Environnement de production valide.')"
+
+PYTHON="$API_DIR/.venv/bin/python"
+[[ -x "$PYTHON" ]] || die "Environnement Python de production absent."
+
+"$UV_BIN" pip install --python "$PYTHON" "$WHEEL"
+
+sudo chown -R "$SERVICE_NAME:$SERVICE_NAME" "$STAGING_DIR"
+sudo chmod -R u+rwX,go+rX "$STAGING_DIR"
+
+echo "==> [5/8] Vérification de PostgreSQL..."
+
+sudo systemctl is-active --quiet postgresql ||
+    die "PostgreSQL n'est pas actif."
+
+sudo -u "$SERVICE_NAME" psql \
+    --dbname="$DB_NAME" \
+    --set=ON_ERROR_STOP=1 \
+    --command='SELECT 1;' >/dev/null ||
+    die "Connexion PostgreSQL impossible pour le compte de service."
+
+echo "==> [6/8] Application des migrations disponibles..."
+
+MIGRATION_DIRS=()
+[[ -d "$ROOT/engine/src/database/migrations" ]] &&
+    MIGRATION_DIRS+=("$ROOT/engine/src/database/migrations")
+[[ -d "$ROOT/migrations" ]] &&
+    MIGRATION_DIRS+=("$ROOT/migrations")
+
+# Les fichiers SQL sont appliqués une seule fois, par ordre alphabétique.
+if ((${#MIGRATION_DIRS[@]} > 0)); then
+    sudo -u "$SERVICE_NAME" psql \
+        --dbname="$DB_NAME" \
+        --set=ON_ERROR_STOP=1 <<'SQL'
+CREATE TABLE IF NOT EXISTS codecenter_schema_migrations (
+    filename TEXT PRIMARY KEY,
+    applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
 SQL
 
-unset DATABASE_PASSWORD DATABASE_PASSWORD_SQL
+    for directory in "${MIGRATION_DIRS[@]}"; do
+        while IFS= read -r -d '' migration; do
+            filename="$(basename "$migration")"
 
-# Crée la base si nécessaire.
-if ! sudo -u postgres psql -tAc \
-    "SELECT 1 FROM pg_database WHERE datname = '$DB_NAME'" |
-    grep -q 1
-then
-    sudo -u postgres createdb \
-        --owner="$DB_USER" \
-        "$DB_NAME"
+            already_applied="$(
+                sudo -u "$SERVICE_NAME" psql \
+                    --dbname="$DB_NAME" \
+                    --tuples-only --no-align \
+                    --set=filename="$filename" \
+                    --command="SELECT 1 FROM codecenter_schema_migrations WHERE filename = :'filename';"
+            )"
+
+            [[ "$already_applied" == "1" ]] && continue
+
+            echo "Migration : $filename"
+
+            sudo -u "$SERVICE_NAME" psql \
+                --dbname="$DB_NAME" \
+                --set=ON_ERROR_STOP=1 \
+                --single-transaction \
+                --file="$migration"
+
+            sudo -u "$SERVICE_NAME" psql \
+                --dbname="$DB_NAME" \
+                --set=ON_ERROR_STOP=1 \
+                --set=filename="$filename" \
+                --command="INSERT INTO codecenter_schema_migrations (filename) VALUES (:'filename');"
+        done < <(
+            find "$directory" -maxdepth 1 -type f -name '*.sql' -print0 |
+                sort -z
+        )
+    done
+else
+    echo "Aucun répertoire de migrations reconnu : migrations ignorées."
 fi
 
-# Assure au rôle applicatif la propriété de la base et du schéma public.
-sudo -u postgres psql \
-    --dbname="$DB_NAME" \
-    --set=ON_ERROR_STOP=1 \
-    --command="ALTER DATABASE \"$DB_NAME\" OWNER TO \"$DB_USER\";" \
-    --command="ALTER SCHEMA public OWNER TO \"$DB_USER\";"
+echo "==> [7/8] Installation et configuration de systemd..."
 
-echo "==> [5/8] Application des migrations SQL..."
-
-sudo -u postgres psql \
-    --dbname="$DB_NAME" \
-    --set=ON_ERROR_STOP=1 \
-    --command="SET ROLE \"$DB_USER\"" \
-    --command="CREATE TABLE IF NOT EXISTS public.schema_migrations (
-        version TEXT PRIMARY KEY,
-        applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-    );"
-
-migration_files=("$MIGRATIONS"/*.sql)
-((${#migration_files[@]} > 0)) ||
-    die "Aucune migration SQL trouvée."
-
-for migration in "${migration_files[@]}"; do
-    [[ -f "$migration" ]] || continue
-
-    filename="$(basename "$migration")"
-    version="${filename%.sql}"
-
-    [[ "$version" =~ ^[a-zA-Z0-9_-]+$ ]] ||
-        die "Nom de migration invalide : $filename"
-
-    applied="$(
-        sudo -u postgres psql \
-            --dbname="$DB_NAME" \
-            --tuples-only \
-            --no-align \
-            --set=ON_ERROR_STOP=1 \
-            --command="SELECT 1 FROM public.schema_migrations WHERE version = '$version';"
-    )"
-
-    if [[ "$applied" == "1" ]]; then
-        echo "    Déjà appliquée : $filename"
-        continue
-    fi
-
-    echo "    Application : $filename"
-
-    migration_tmp="$(mktemp)"
-
-    {
-        echo "BEGIN;"
-        cat "$migration"
-        printf "\nINSERT INTO public.schema_migrations (version) VALUES ('%s');\n" "$version"
-        echo "COMMIT;"
-    } > "$migration_tmp"
-
-    chmod 644 "$migration_tmp"
-
-    if ! sudo -u postgres psql \
-        --dbname="$DB_NAME" \
-        --set=ON_ERROR_STOP=1 \
-        --command="SET ROLE \"$DB_USER\"" \
-        --file="$migration_tmp"
-    then
-        rm -f "$migration_tmp"
-        die "Échec de la migration $filename."
-    fi
-
-    rm -f "$migration_tmp"
-done
-
-echo "==> [6/8] Installation de la nouvelle version..."
-
-if sudo systemctl is-active --quiet "$SERVICE_NAME"; then
-    sudo systemctl stop "$SERVICE_NAME"
-fi
-
+# Sauvegarde de la version précédente.
 sudo rm -rf -- "$BACKUP_DIR"
 
 if [[ -d "$INSTALL_DIR" ]]; then
-    sudo mv "$INSTALL_DIR" "$BACKUP_DIR"
+    sudo mv -- "$INSTALL_DIR" "$BACKUP_DIR"
 fi
 
-sudo mv "$STAGING_DIR" "$INSTALL_DIR"
+sudo mv -- "$STAGING_DIR" "$INSTALL_DIR"
+sudo chown -R "$SERVICE_NAME:$SERVICE_NAME" "$INSTALL_DIR"
 
-rollback() {
-    echo "Échec du déploiement : restauration de la version précédente." >&2
+UNIT_TMP="$BUILD_DIR/${SERVICE_NAME}.service"
 
-    sudo systemctl stop "$SERVICE_NAME" 2>/dev/null || true
+cat > "$UNIT_TMP" <<EOF
+[Unit]
+Description=Imperial CodeCenter API
+After=network.target postgresql.service
+Requires=postgresql.service
 
-    if [[ -d "$BACKUP_DIR" ]]; then
-        sudo rm -rf -- "$INSTALL_DIR"
-        sudo mv "$BACKUP_DIR" "$INSTALL_DIR"
-    fi
+[Service]
+Type=simple
+User=$SERVICE_NAME
+Group=$SERVICE_NAME
+WorkingDirectory=$INSTALL_DIR
+EnvironmentFile=$ENV_DEST
+Environment=PYTHONUNBUFFERED=1
+ExecStart=$INSTALL_DIR/api/.venv/bin/python -m uvicorn main:app --app-dir $INSTALL_DIR/api/src --host $API_HOST --port $API_PORT
+Restart=on-failure
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=$DATA_DIR
 
-    sudo systemctl daemon-reload
-    sudo systemctl start "$SERVICE_NAME" 2>/dev/null || true
-}
+[Install]
+WantedBy=multi-user.target
+EOF
 
-echo "==> [7/8] Installation des dépendances..."
-
-if ! sudo "$UV_BIN" sync \
-    --project "$INSTALL_DIR/api" \
-    --no-dev
-then
-    rollback
-    die "Échec de uv sync."
-fi
-
-if ! sudo "$UV_BIN" pip install \
-    --python "$INSTALL_DIR/api/.venv/bin/python" \
-    "${wheels[@]}"
-then
-    rollback
-    die "Installation du moteur Rust impossible."
-fi
-
-if ! sudo "$INSTALL_DIR/api/.venv/bin/python" -c \
-    "import codecenter_engine; print(codecenter_engine.healt())"
-then
-    rollback
-    die "Le moteur Rust ne fonctionne pas."
-fi
-
-echo "==> [8/8] Configuration et démarrage du backend..."
-
-sudo install -d \
-    -o root -g root -m 700 \
-    "$(dirname "$ENV_DEST")"
-
-sudo install \
-    -o root -g root -m 600 \
-    "$ENV_FILE" "$ENV_DEST"
-
-SERVICE_TMP="$(mktemp)"
-
-sed \
-    -e "s|@SERVICE_NAME@|$SERVICE_NAME|g" \
-    -e "s|@INSTALL_DIR@|$INSTALL_DIR|g" \
-    -e "s|@DATA_DIR@|$DATA_DIR|g" \
-    -e "s|@HOST@|$HOST|g" \
-    -e "s|@PORT@|$PORT|g" \
-    -e "s|@DB_NAME@|$DB_NAME|g" \
-    -e "s|@DB_USER@|$DB_USER|g" \
-    "$SERVICE_TEMPLATE" > "$SERVICE_TMP"
-
-sudo install -m 644 "$SERVICE_TMP" "$SERVICE_FILE"
-rm -f "$SERVICE_TMP"
-
+sudo install -o root -g root -m 644 "$UNIT_TMP" "$SERVICE_FILE"
 sudo systemctl daemon-reload
 sudo systemctl enable "$SERVICE_NAME"
 
+echo "==> [8/8] Démarrage et vérification..."
+
 if ! sudo systemctl restart "$SERVICE_NAME"; then
-    sudo journalctl -u "$SERVICE_NAME" -n 60 --no-pager || true
-    rollback
-    die "Impossible de démarrer le backend."
+    echo "Erreur au démarrage. Consulte les journaux :" >&2
+    sudo journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true
+    die "La nouvelle version n'a pas démarré. La version précédente est conservée dans $BACKUP_DIR."
 fi
 
-for ((i = 0; i < HEALTH_RETRIES; i++)); do
-    if curl --fail --silent \
-        "http://${HOST}:${PORT}${HEALTH_ENDPOINT}" >/dev/null
-    then
-        echo
-        echo "Imperial CodeCenter est opérationnel !"
-        echo "API : http://${HOST}:${PORT}"
-        echo "Documentation : http://${HOST}:${PORT}/docs"
-        echo "Stockage : $DATA_DIR/codes"
-        echo "Base PostgreSQL : $DB_NAME"
-        echo "Logs : sudo journalctl -u $SERVICE_NAME -f"
+sleep 2
 
-        sudo rm -rf -- "$BACKUP_DIR"
-        exit 0
-    fi
+if ! sudo systemctl is-active --quiet "$SERVICE_NAME"; then
+    sudo journalctl -u "$SERVICE_NAME" -n 80 --no-pager || true
+    die "Le service n'est pas actif. La version précédente est conservée dans $BACKUP_DIR."
+fi
 
-    sleep "$HEALTH_INTERVAL"
-done
-
-sudo journalctl -u "$SERVICE_NAME" -n 60 --no-pager || true
-rollback
-die "Le backend ne répond pas après le démarrage."
+echo
+echo "Release terminée."
+echo "Service : $SERVICE_NAME"
+echo "API : http://$API_HOST:$API_PORT"
+echo "Documentation : http://$API_HOST:$API_PORT/docs"
+echo "Watcher : $WATCH_PATH"
+echo "Ancienne version : $BACKUP_DIR"
+echo
+echo "Journaux : sudo journalctl -u $SERVICE_NAME -f"
