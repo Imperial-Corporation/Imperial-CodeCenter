@@ -1,0 +1,27 @@
+/* Mise en page classique : en-tête, contenu extensible et pied de page collé en bas. */
+* { box-sizing: border-box; }
+
+body {
+    min-height: 100vh;
+    margin: 0;
+    display: flex;
+    flex-direction: column;
+    font-family: system-ui, sans-serif;
+}
+
+header, footer { padding: 1rem 2rem; background: #151a24; color: #edf0f7; }
+
+main {
+    flex: 1;                       /* occupe l'espace restant */
+    display: flex;
+    gap: 1.5rem;
+    padding: 2rem;
+}
+
+aside { flex: 0 0 240px; }         /* largeur fixe */
+article { flex: 1; min-width: 0; } /* min-width évite le débordement du texte long */
+
+@media (max-width: 700px) {
+    main { flex-direction: column; }
+    aside { flex-basis: auto; }
+}

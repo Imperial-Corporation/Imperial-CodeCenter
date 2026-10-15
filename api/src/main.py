@@ -1,26 +1,21 @@
+import asyncio
 import json
 import logging
+import os
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import (
-    FastAPI,
-    File,
-    HTTPException,
-    UploadFile,
-    WebSocket,
-    WebSocketDisconnect,
-)
+from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel, Field
 
-from codecenter_engine import (
-    get_stats,
-    healt,
-    start_watcher,
-    stop_watcher,
-)
+from codecenter_engine import get_stats, healt, start_watcher, stop_watcher
+
+from icc_ai.admin_api import router as admin_router
+from icc_ai.api import router as ai_router
+from icc_ai.proxy import ProxyMiddleware, ProxySettings
+from icc_ai.services import build_services
+
 
 # --------------------------------------------------
 # Configuration
@@ -33,139 +28,97 @@ logger = logging.getLogger(__name__)
 
 
 # --------------------------------------------------
-# Cycle de vie de l'application
+# Cycle de vie
 # --------------------------------------------------
+
+async def _depot_loop(library) -> None:
+    """Range périodiquement la zone de dépôt (CODECENTER_DEPOT_SECS, 0 = désactivé)."""
+    try:
+        interval = float(os.environ.get("CODECENTER_DEPOT_SECS", "15") or 15)
+    except ValueError:
+        interval = 15.0
+    if interval <= 0:
+        return
+    while True:
+        try:
+            report = await asyncio.to_thread(library.scan_depot)
+            if report.saved or report.skipped:
+                logger.info("Zone de dépôt : %d rangé(s), %d ignoré(s)", len(report.saved), len(report.skipped))
+                for item in report.skipped:
+                    logger.warning("Dépôt ignoré : %s (%s)", item["name"], item["reason"])
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception("Échec du passage sur la zone de dépôt")
+        await asyncio.sleep(max(interval, 2.0))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    """Démarre et arrête les services du moteur avec l'API."""
+    """Démarre et arrête le watcher avec l'application."""
     logger.info("Démarrage du watcher CodeCenter")
-
     start_watcher()
+
+    # Services IA : configuration chiffrée, moteur Rust, orchestrateur.
+    # Un échec (clé de chiffrement invalide…) ne doit pas empêcher le
+    # démarrage du reste de l'application : les routes IA répondront 503.
+    try:
+        app.state.ai = build_services()
+    except Exception:
+        app.state.ai = None
+        logger.exception("Impossible d'initialiser les services IA")
+
+    depot_task = None
+    services = app.state.ai
+    if services is not None and services.library is not None:
+        services.library.ensure_depot()
+        depot_task = asyncio.create_task(_depot_loop(services.library))
+    if services is not None and services.crawler is not None:
+        services.crawler.resume()
 
     try:
         yield
     finally:
+        if depot_task is not None:
+            depot_task.cancel()
+            await asyncio.gather(depot_task, return_exceptions=True)
+        if services is not None and services.crawler is not None:
+            await services.crawler.shutdown()
         logger.info("Arrêt du watcher CodeCenter")
-
         try:
             stop_watcher()
         except Exception:
             logger.exception("Échec de l'arrêt du watcher")
 
 
+# --------------------------------------------------
+# Application
+# --------------------------------------------------
+
 app = FastAPI(
-    title="Imperial CodeCenter API",
-    version="0.1.0",
-    description="API locale du moteur Imperial CodeCenter.",
+    title="Imperial CodeCenter",
+    version="1.0.0",
+    description="Moteur de recherche de code assisté par IA.",
     lifespan=lifespan,
 )
 
-app.mount(
-    "/static",
-    StaticFiles(directory=FRONTEND),
-    name="static",
-)
+app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 
 
 # --------------------------------------------------
-# Schémas des requêtes
+# IA : configuration des fournisseurs et recherche (/api/v1/search)
 # --------------------------------------------------
 
-class SearchRequest(BaseModel):
-    query: str = Field(min_length=1, max_length=2000)
-    limit: int = Field(default=10, ge=1, le=100)
-    language: str | None = Field(default=None, max_length=50)
+app.include_router(ai_router)
+app.include_router(admin_router)
 
-
-# --------------------------------------------------
-# Fonctions métier — implémentation à venir
-# --------------------------------------------------
-
-def search_documents(
-    query: str,
-    limit: int = 10,
-    language: str | None = None,
-) -> dict:
-    """Recherche des documents via le moteur Rust."""
-    raise NotImplementedError
-
-
-async def import_documents(
-    files: list[UploadFile],
-) -> dict:
-    """Valide, stocke et indexe les fichiers importés."""
-    raise NotImplementedError
-
-
-def list_documents(
-    limit: int = 50,
-    offset: int = 0,
-) -> dict:
-    """Retourne une page de documents indexés."""
-    raise NotImplementedError
-
-
-def get_document(
-    document_id: str,
-) -> dict:
-    """Récupère les métadonnées d'un document."""
-    raise NotImplementedError
-
-
-def delete_document(
-    document_id: str,
-) -> dict:
-    """Supprime un document et son entrée d'index."""
-    raise NotImplementedError
-
-
-def rebuild_index() -> dict:
-    """Reconstruit l'index à partir des documents stockés."""
-    raise NotImplementedError
-
-
-def get_statistics() -> dict:
-    """Retourne les statistiques du moteur et de l'index."""
-    try:
-        return json.loads(get_stats())
-    except Exception as exc:
-        logger.exception(
-            "Échec de récupération des statistiques Rust/PostgreSQL"
-        )
-        raise HTTPException(
-            status_code=503,
-            detail="Impossible de récupérer les statistiques du moteur.",
-        ) from exc
-
-
-def get_configuration() -> dict:
-    """Retourne la configuration publique de CodeCenter."""
-    raise NotImplementedError
+# Proxy inverse (nginx / Cloudflare) : inactif sauf si CODECENTER_PROXY_MODE le demande.
+# Les en-têtes de sécurité sont envoyés dans tous les cas.
+app.add_middleware(ProxyMiddleware)
 
 
 # --------------------------------------------------
-# Gestion des fonctionnalités non implémentées
-# --------------------------------------------------
-
-def not_implemented(feature: str):
-    raise HTTPException(
-        status_code=501,
-        detail=f"Fonctionnalité non implémentée : {feature}",
-    )
-
-
-# --------------------------------------------------
-# Frontend
-# --------------------------------------------------
-
-@app.get("/", include_in_schema=False)
-def index():
-    return FileResponse(FRONTEND / "index.html")
-
-
-# --------------------------------------------------
-# Santé et statut
+# Santé et statistiques
 # --------------------------------------------------
 
 @app.get("/api/health", tags=["System"])
@@ -185,77 +138,41 @@ def status():
     }
 
 
+@app.get("/api/v1/proxy/check", tags=["System"])
+def proxy_check(request: Request):
+    """Aide au réglage du proxy : ce que le service voit réellement de la requête."""
+    settings = ProxySettings.from_environment()
+    return {
+        "mode": settings.mode,
+        "client_ip": request.client.host if request.client else None,
+        "scheme": request.url.scheme,
+        "host": request.headers.get("host"),
+        "forwarded_headers_present": [
+            h for h in ("x-forwarded-for", "x-forwarded-proto", "x-forwarded-host", "x-real-ip",
+                        "cf-connecting-ip", "cf-visitor") if h in request.headers
+        ],
+    }
+
+
 @app.get("/api/v1/stats", tags=["System"])
 def statistics():
-    return get_statistics()
-
-
-# --------------------------------------------------
-# Recherche
-# --------------------------------------------------
-
-@app.post("/api/v1/search", tags=["Search"])
-def search(request: SearchRequest):
-    return not_implemented("search")
-
-
-# --------------------------------------------------
-# Documents
-# --------------------------------------------------
-
-@app.post("/api/v1/documents", tags=["Documents"])
-async def upload_documents(
-    files: list[UploadFile] = File(...),
-):
-    return not_implemented("document import")
-
-
-@app.get("/api/v1/documents", tags=["Documents"])
-def documents(
-    limit: int = 50,
-    offset: int = 0,
-):
-    if not 1 <= limit <= 100:
+    try:
+        return json.loads(get_stats())
+    except Exception as exc:
+        logger.exception("Échec de récupération des statistiques")
         raise HTTPException(
-            status_code=422,
-            detail="limit doit être compris entre 1 et 100.",
-        )
-
-    if offset < 0:
-        raise HTTPException(
-            status_code=422,
-            detail="offset doit être positif ou nul.",
-        )
-
-    return not_implemented("document listing")
-
-
-@app.get("/api/v1/documents/{document_id}", tags=["Documents"])
-def document_details(document_id: str):
-    return not_implemented("document details")
-
-
-@app.delete("/api/v1/documents/{document_id}", tags=["Documents"])
-def remove_document(document_id: str):
-    return not_implemented("document deletion")
+            status_code=503,
+            detail="Impossible de récupérer les statistiques du moteur.",
+        ) from exc
 
 
 # --------------------------------------------------
-# Index
+# Frontend
 # --------------------------------------------------
 
-@app.post("/api/v1/index/rebuild", tags=["Index"])
-def index_rebuild():
-    return not_implemented("index rebuild")
-
-
-# --------------------------------------------------
-# Configuration
-# --------------------------------------------------
-
-@app.get("/api/v1/config", tags=["System"])
-def configuration():
-    return not_implemented("configuration")
+@app.get("/", include_in_schema=False)
+def index():
+    return FileResponse(FRONTEND / "index.html")
 
 
 # --------------------------------------------------

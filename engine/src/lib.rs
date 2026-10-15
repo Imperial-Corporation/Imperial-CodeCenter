@@ -5,6 +5,7 @@ use std::thread::JoinHandle;
 
 mod database;
 mod indexing;
+mod search;
 mod watcher;
 
 use crate::database::get_stats_json;
@@ -105,17 +106,53 @@ fn healt() -> String {
     String::from("Rust System is Working !")
 }
 
-#[pyfunction]
-fn search(
+/// Traduit une erreur de recherche en exception Python typée :
+/// ValueError (invalide), LookupError (introuvable), PermissionError
+/// (chemin interdit) ou RuntimeError (interne).
+fn to_py_error(error: search::SearchError) -> PyErr {
+    use pyo3::exceptions::{PyLookupError, PyPermissionError, PyRuntimeError, PyValueError};
+    use search::SearchError;
+
+    match error {
+        SearchError::Invalid(message) => PyValueError::new_err(message),
+        SearchError::NotFound(message) => PyLookupError::new_err(message),
+        SearchError::Forbidden(message) => PyPermissionError::new_err(message),
+        SearchError::Internal(message) => PyRuntimeError::new_err(message),
+    }
+}
+
+/// Recherche de documents ; retourne un JSON (voir `search::SearchOutput`).
+#[pyfunction(name = "search")]
+#[pyo3(signature = (query, limit=10, language=None, category=None))]
+fn search_documents(
+    py: Python<'_>,
     query: &str,
     limit: usize,
     language: Option<&str>,
+    category: Option<&str>,
 ) -> PyResult<String> {
-    let _ = (query, limit, language);
+    py.detach(|| search::search_json(query, limit, language, category))
+        .map_err(to_py_error)
+}
 
-    Err(pyo3::exceptions::PyNotImplementedError::new_err(
-        "search n'est pas encore implémentée",
-    ))
+/// Lit un document indexé (plage de lignes et plafond d'octets optionnels).
+#[pyfunction]
+#[pyo3(signature = (document_id, start_line=None, end_line=None, max_bytes=None))]
+fn get_document(
+    py: Python<'_>,
+    document_id: &str,
+    start_line: Option<usize>,
+    end_line: Option<usize>,
+    max_bytes: Option<usize>,
+) -> PyResult<String> {
+    py.detach(|| search::get_document_json(document_id, start_line, end_line, max_bytes))
+        .map_err(to_py_error)
+}
+
+/// Langages et catégories réellement présents (filtres disponibles).
+#[pyfunction]
+fn list_filters(py: Python<'_>) -> PyResult<String> {
+    py.detach(search::list_filters_json).map_err(to_py_error)
 }
 
 #[pyfunction]
@@ -124,11 +161,20 @@ fn get_stats(py: Python<'_>) -> PyResult<String> {
         .map_err(pyo3::exceptions::PyRuntimeError::new_err)
 }
 
+/// Santé de l'indexation : échecs, dossiers non inscriptibles, fichiers ignorés.
+#[pyfunction]
+fn indexing_issues() -> String {
+    indexing::health::report_json()
+}
+
 #[pymodule]
 fn codecenter_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(healt, m)?)?;
-    m.add_function(wrap_pyfunction!(search, m)?)?;
+    m.add_function(wrap_pyfunction!(search_documents, m)?)?;
+    m.add_function(wrap_pyfunction!(get_document, m)?)?;
+    m.add_function(wrap_pyfunction!(list_filters, m)?)?;
     m.add_function(wrap_pyfunction!(get_stats, m)?)?;
+    m.add_function(wrap_pyfunction!(indexing_issues, m)?)?;
     m.add_function(wrap_pyfunction!(start_watcher, m)?)?;
     m.add_function(wrap_pyfunction!(stop_watcher, m)?)?;
 

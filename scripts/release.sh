@@ -44,8 +44,8 @@ source "$CONFIG"
 
 DB_NAME="${DB_NAME:-imperial_codecenter}"
 DB_USER="${DB_USER:-$SERVICE_NAME}"
-API_HOST="${API_HOST:-127.0.0.1}"
-API_PORT="${API_PORT:-8000}"
+API_HOST="${API_HOST:-${HOST:-127.0.0.1}}"
+API_PORT="${API_PORT:-${PORT:-8000}}"
 
 [[ "$DB_NAME" =~ ^[a-zA-Z0-9_-]+$ ]] ||
     die "DB_NAME invalide."
@@ -97,11 +97,17 @@ echo "==> [2/8] Préparation de la configuration..."
 
 sudo install -d -o root -g root -m 700 "$ENV_DIR"
 
-python3 - "$ENV_SOURCE" "$BUILD_DIR/.env" "$WATCH_PATH" "$DB_NAME" <<'PY'
+# Clé de chiffrement des secrets IA déjà installée : elle doit survivre aux
+# mises à jour, sinon les clés API enregistrées deviendraient illisibles.
+EXISTING_SECRET="$(sudo grep -s '^CODECENTER_SECRET_KEY=' "$ENV_DEST" | head -n1 || true)"
+
+python3 - "$ENV_SOURCE" "$BUILD_DIR/.env" "$WATCH_PATH" "$DB_NAME" "$EXISTING_SECRET" <<'PY'
+import base64
+import os
 import sys
 from pathlib import Path
 
-source, destination, watch_path, db_name = sys.argv[1:]
+source, destination, watch_path, db_name, existing_secret = sys.argv[1:]
 lines = Path(source).read_text(encoding="utf-8").splitlines()
 
 def set_value(key: str, value: str) -> None:
@@ -122,6 +128,16 @@ def set_value(key: str, value: str) -> None:
 
 set_value("CODECENTER_WATCH_PATHS", watch_path)
 
+# Clé Fernet (32 octets en base64 URL-safe) : conservée si déjà définie dans
+# config/.env ou déjà installée, générée sinon. Elle reste dans /etc (root,
+# 0600), séparée des données chiffrées stockées dans DATA_DIR.
+if not any(line.strip().startswith("CODECENTER_SECRET_KEY=") for line in lines):
+    if existing_secret:
+        lines.append(existing_secret.strip())
+    else:
+        key = base64.urlsafe_b64encode(os.urandom(32)).decode()
+        set_value("CODECENTER_SECRET_KEY", key)
+
 # L'API utilise l'identité Unix du service pour PostgreSQL
 # via le socket local, sans mot de passe dans l'URL.
 if not any(line.strip().startswith("DATABASE_URL=") for line in lines):
@@ -139,14 +155,16 @@ sudo install -d -o "$SERVICE_NAME" -g "$SERVICE_NAME" -m 750 \
     "$DATA_DIR/cache" \
     "$DATA_DIR/tmp"
 
-# Corrige les permissions de tous les fichiers déjà indexables.
-sudo chown -R "$SERVICE_NAME:$SERVICE_NAME" "$WATCH_PATH"
+# Scripts d'exemple (une seule fois ; voir scripts/install_examples.sh).
+sudo "$ROOT/scripts/install_examples.sh" "$WATCH_PATH"
 
-# Les dossiers doivent être traversables par le service.
-sudo find "$WATCH_PATH" -type d -exec chmod 750 {} +
+# Zone de dépôt (voir docs/depot.md) : on y copie des scripts, le service les range.
+sudo install -d -o "$SERVICE_NAME" -g "$SERVICE_NAME" -m 2775 "$WATCH_PATH/_depot"
 
-# Le service peut lire les fichiers sans les rendre exécutables.
-sudo find "$WATCH_PATH" -type f -exec chmod 640 {} +
+# Permissions : groupe du service + setgid + ACL par défaut, SANS chown/chmod
+# généralisés (voir scripts/fix_permissions.sh et docs/permissions.md). Le
+# service peut ainsi ranger même des fichiers déposés par un autre compte.
+"$ROOT/scripts/fix_permissions.sh" "$WATCH_PATH" "$SERVICE_NAME" --user "$USER"
 
 sudo install -o root -g root -m 600 "$BUILD_DIR/.env" "$ENV_DEST"
 
@@ -175,6 +193,18 @@ cp -a "$ROOT/api" "$STAGING_DIR/api"
 
 if [[ -d "$ROOT/frontend" ]]; then
     cp -a "$ROOT/frontend" "$STAGING_DIR/frontend"
+fi
+
+# Le crawler GitHub (paquet autonome) : l'API le lance dans un sous-processus.
+if [[ -d "$ROOT/crawler/src" ]]; then
+    mkdir -p "$STAGING_DIR/crawler"
+    cp -a "$ROOT/crawler/src" "$STAGING_DIR/crawler/src"
+    cp -a "$ROOT/crawler/pyproject.toml" "$STAGING_DIR/crawler/pyproject.toml"
+fi
+
+if [[ -d "$ROOT/config/proxy" ]]; then
+    mkdir -p "$STAGING_DIR/config"
+    cp -a "$ROOT/config/proxy" "$STAGING_DIR/config/proxy"
 fi
 
 if [[ -d "$ROOT/docs" ]]; then
@@ -309,7 +339,12 @@ Group=$SERVICE_NAME
 WorkingDirectory=$INSTALL_DIR
 EnvironmentFile=$ENV_DEST
 Environment=PYTHONUNBUFFERED=1
-ExecStart=$INSTALL_DIR/api/.venv/bin/python -m uvicorn main:app --app-dir $INSTALL_DIR/api/src --host $API_HOST --port $API_PORT
+Environment=CODECENTER_DATA_DIR=$DATA_DIR
+# Les fichiers créés par le service sont modifiables par le groupe (voir docs/permissions.md).
+UMask=0002
+# --no-proxy-headers : c'est l'middleware de l'application (CODECENTER_PROXY_MODE) qui
+# décide, avec liste de proxys de confiance, quels en-têtes X-Forwarded-* croire.
+ExecStart=$INSTALL_DIR/api/.venv/bin/python -m uvicorn main:app --app-dir $INSTALL_DIR/api/src --host $API_HOST --port $API_PORT --no-proxy-headers
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true

@@ -82,7 +82,7 @@
 
         <section class="upload-section" aria-labelledby="files-title">
             <div class="section-heading">
-                <h2 id="files-title">Fichiers</h2>
+                <h2 id="files-title">Ajouter des scripts</h2>
                 <span class="file-counter" id="file-counter">0 fichier</span>
             </div>
 
@@ -92,7 +92,7 @@
                     type="file"
                     multiple
                     hidden
-                    accept=".c,.h,.cpp,.hpp,.rs,.py,.js,.ts,.html,.css,.json,.md,.txt,.toml,.yaml,.yml,.xml,.sh,.sql,.java,.go,.php,.rb,.swift,.kt,.pdf"
+                    accept=".zip,.c,.h,.cc,.cpp,.cxx,.hpp,.rs,.py,.js,.jsx,.mjs,.ts,.tsx,.html,.htm,.css,.sh,.bash,.sql,.java,.cs,.go,.php,.rb,.swift,.kt,.kts,.scala,.lua,.zig"
                 >
 
                 <span class="upload-icon" aria-hidden="true">
@@ -120,11 +120,62 @@
             </label>
 
             <div id="file-list" class="file-list" hidden></div>
+
+            <div id="import-options" class="import-options" hidden>
+                <label class="import-field" for="tags-input">
+                    <span>Tags</span>
+                    <input
+                        id="tags-input"
+                        type="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        maxlength="400"
+                        placeholder="tag1, tag2 (ex. api, python, chiffrement)"
+                    >
+                </label>
+                <p class="import-hint">
+                    Les tags deviennent des dossiers rangés automatiquement
+                    (<code>tag1/tag2/langage/</code>) et servent de catégories à la recherche.
+                    Sans tag, chaque script est classé automatiquement.
+                </p>
+                <div id="tag-preview" class="tag-preview" aria-live="polite"></div>
+                <label class="import-check">
+                    <input type="checkbox" id="auto-classify" checked>
+                    Classer automatiquement les scripts sans tag
+                </label>
+                <label class="import-check">
+                    <input type="checkbox" id="keep-folders" checked>
+                    Utiliser aussi les dossiers d'une archive ZIP comme tags
+                </label>
+            </div>
+
+            <label id="import-admin" class="import-field" for="import-admin-input" hidden>
+                <span>Jeton d'administration</span>
+                <input id="import-admin-input" type="password" autocomplete="off">
+            </label>
+
+            <div id="import-report" class="import-report" hidden></div>
+
+            <details class="depot-info">
+                <summary>Zone de dépôt (copie directe sur le serveur)</summary>
+                <p>
+                    Copie tes scripts dans le dossier <code id="depot-path">…/codes/_depot</code> ;
+                    ils sont rangés puis retirés automatiquement. Les tags viennent d'un fichier
+                    <code>tags.txt</code>, d'un fichier <code>nom.tags</code> ou des sous-dossiers.
+                </p>
+                <button type="button" id="depot-scan" class="sp-button">Ranger la zone de dépôt maintenant</button>
+            </details>
         </section>
 
         <p id="message" class="message" role="status" aria-live="polite"></p>
     </main>
 
+    <script src="/static/scripts/api.js" defer></script>
+    <script src="/static/scripts/markdown.js" defer></script>
+    <script src="/static/scripts/answer-view.js" defer></script>
+    <script src="/static/scripts/chat.js" defer></script>
+    <script src="/static/scripts/settings-panel.js" defer></script>
+    <script src="/static/scripts/crawler-panel.js" defer></script>
     <script src="/static/scripts/app.js" defer></script>
 </body>
 </html>

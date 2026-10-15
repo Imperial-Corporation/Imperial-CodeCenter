@@ -2,6 +2,7 @@
 
 document.addEventListener("DOMContentLoaded", () => {
     const API_BASE = "/api/v1";
+    const ICC = window.ICC;
 
     const connectionStatus = document.getElementById("connection-status");
     const connectionLabel = document.getElementById("connection-label");
@@ -267,7 +268,8 @@ document.addEventListener("DOMContentLoaded", () => {
     connectWebSocket();
 
     /* --------------------------------------------------
-       Résultats de recherche
+       Recherche assistée par IA
+       (appels réseau : api.js ; affichage : answer-view.js)
     -------------------------------------------------- */
 
     let resultsSection = document.getElementById("search-results");
@@ -281,6 +283,8 @@ document.addEventListener("DOMContentLoaded", () => {
         searchSection.insertAdjacentElement("afterend", resultsSection);
     }
 
+    let searchController = null;
+
     function clearResults() {
         if (!resultsSection) return;
 
@@ -288,97 +292,69 @@ document.addEventListener("DOMContentLoaded", () => {
         resultsSection.hidden = true;
     }
 
-    function renderSearchResults(data) {
-        if (!resultsSection) return;
-
-        resultsSection.replaceChildren();
+    function showInResults(...nodes) {
+        resultsSection.replaceChildren(...nodes);
         resultsSection.hidden = false;
+    }
 
-        const results = Array.isArray(data.results) ? data.results : [];
+    function newSearchButton() {
+        return createActionButton("Nouvelle recherche", "ai-new-search", () => {
+            clearResults();
+            showMessage("");
+            searchInput.focus();
+            searchInput.select();
+        });
+    }
 
-        const heading = createElement(
-            "h2",
-            "results-heading",
-            `Résultats (${Number.isFinite(data.total) ? data.total : results.length})`
+    function renderLoading() {
+        const box = createElement("div", "ai-loading");
+        box.setAttribute("role", "status");
+
+        box.append(
+            createElement("span", "ai-spinner"),
+            createElement("span", "ai-loading-text", "Recherche dans l'index et analyse par l'IA…"),
+            createActionButton("Annuler", "ai-cancel", () => {
+                if (searchController) searchController.abort();
+            }),
         );
 
-        resultsSection.append(heading);
+        showInResults(box);
+    }
 
-        if (results.length === 0) {
-            resultsSection.append(
-                createElement(
-                    "p",
-                    "results-empty",
-                    "Aucun résultat trouvé."
-                )
-            );
+    function renderFailure(error) {
+        const box = createElement("div", "ai-error");
+        box.setAttribute("role", "alert");
 
+        box.append(createElement("strong", "", "La recherche a échoué"));
+        box.append(createElement("p", "", error.message || "Erreur inattendue."));
+
+        const code = error.code || "";
+
+        if (code.startsWith("provider_auth") || code.startsWith("provider_not_found") || code === "config") {
+            box.append(createActionButton("Ouvrir la configuration IA", "ai-cancel", () => {
+                const fab = document.querySelector(".settings-fab");
+                if (fab) fab.click();
+            }));
+        }
+
+        showInResults(box, newSearchButton());
+    }
+
+    function renderResponse(data) {
+        const conversationId = data.meta && data.meta.conversation_id;
+
+        if (!conversationId || !ICC.chat) {
+            showInResults(ICC.answerView.render(data), newSearchButton());
             return;
         }
 
-        for (const result of results) {
-            const card = createElement("article", "result-card");
-
-            const title = createElement(
-                "h3",
-                "result-title",
-                typeof result.title === "string"
-                    ? result.title
-                    : "Document sans titre"
-            );
-
-            const metadata = [];
-
-            if (typeof result.language === "string") {
-                metadata.push(result.language);
-            }
-
-            if (typeof result.source === "string") {
-                metadata.push(result.source);
-            }
-
-            if (typeof result.score === "number") {
-                metadata.push(`Score : ${result.score.toFixed(2)}`);
-            }
-
-            const details = createElement(
-                "p",
-                "result-meta",
-                metadata.join(" · ")
-            );
-
-            const snippet = createElement(
-                "p",
-                "result-snippet",
-                typeof result.snippet === "string" ? result.snippet : ""
-            );
-
-            card.append(title);
-
-            if (metadata.length > 0) {
-                card.append(details);
-            }
-
-            if (snippet.textContent) {
-                card.append(snippet);
-            }
-
-            if (typeof result.document_id === "string") {
-                card.dataset.documentId = result.document_id;
-            }
-
-            resultsSection.append(card);
-        }
-
-        if (typeof data.took_ms === "number") {
-            resultsSection.append(
-                createElement(
-                    "p",
-                    "results-time",
-                    `Recherche effectuée en ${data.took_ms} ms`
-                )
-            );
-        }
+        // La recherche ouvre une conversation : l'utilisateur peut poursuivre avec l'IA.
+        const chat = ICC.chat.create({ conversationId });
+        const view = ICC.answerView.render(data, {
+            idPrefix: "first-",
+            onFollowUp: (text) => chat.ask(text, "auto"),
+        });
+        showInResults(view, chat.element, newSearchButton());
     }
 
     if (searchForm && searchInput) {
@@ -396,36 +372,34 @@ document.addEventListener("DOMContentLoaded", () => {
             }
 
             isSearching = true;
+            searchController = new AbortController();
 
             if (searchButton) {
                 searchButton.disabled = true;
                 searchButton.textContent = "Recherche...";
             }
 
-            showMessage("Recherche en cours...");
-            clearResults();
+            showMessage("");
+            renderLoading();
 
             try {
-                const data = await apiRequest(`${API_BASE}/search`, {
-                    method: "POST",
-                    body: JSON.stringify({
-                        query,
-                        limit: 10,
-                        language: null,
-                    }),
+                const data = await ICC.services.search(query, {
+                    limit: 10,
+                    signal: searchController.signal,
                 });
 
-                renderSearchResults(data);
-                showMessage("Recherche terminée.", "success");
+                renderResponse(data);
             } catch (error) {
-                console.error("Erreur de recherche :", error);
-
-                showMessage(
-                    describeApiError(error, "Recherche"),
-                    "error"
-                );
+                if (error.name === "AbortError") {
+                    clearResults();
+                    showMessage("Recherche annulée.");
+                } else {
+                    console.error("Erreur de recherche :", error);
+                    renderFailure(error);
+                }
             } finally {
                 isSearching = false;
+                searchController = null;
 
                 if (searchButton) {
                     searchButton.disabled = false;
@@ -548,8 +522,19 @@ document.addEventListener("DOMContentLoaded", () => {
     }
 
     /* --------------------------------------------------
-       Envoi des fichiers à l'API
+       Import dans la bibliothèque (fichiers, ZIP, tags)
     -------------------------------------------------- */
+
+    const importOptions = document.getElementById("import-options");
+    const tagsInput = document.getElementById("tags-input");
+    const tagPreview = document.getElementById("tag-preview");
+    const autoClassify = document.getElementById("auto-classify");
+    const keepFolders = document.getElementById("keep-folders");
+    const importReport = document.getElementById("import-report");
+    const importAdmin = document.getElementById("import-admin");
+    const importAdminInput = document.getElementById("import-admin-input");
+    const depotPath = document.getElementById("depot-path");
+    const depotScan = document.getElementById("depot-scan");
 
     let uploadButton = document.getElementById("upload-button");
 
@@ -562,19 +547,37 @@ document.addEventListener("DOMContentLoaded", () => {
 
         uploadButton.id = "upload-button";
         uploadButton.hidden = true;
-
-        uploadButton.style.marginTop = "16px";
-        uploadButton.style.padding = "12px 18px";
-        uploadButton.style.border = "0";
-        uploadButton.style.borderRadius = "10px";
-        uploadButton.style.background = "#8b7bff";
-        uploadButton.style.color = "#ffffff";
-        uploadButton.style.fontWeight = "650";
-
-        uploadSection.append(uploadButton);
+        // Placé juste après les options d'import.
+        (importOptions || uploadSection).insertAdjacentElement(
+            importOptions ? "afterend" : "beforeend", uploadButton);
     }
 
+    // Même règle que le serveur : minuscules, caractères sûrs, 8 tags au plus.
+    function normalizeTags(text) {
+        const tags = [];
+        text.split(/[,;\n]+/).forEach((raw) => {
+            const tag = raw.replace(/^#/, "").trim().toLowerCase()
+                .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                .replace(/[^a-z0-9._+-]+/g, "-").replace(/^[-._]+|[-._]+$/g, "").slice(0, 40);
+            if (tag && !tags.includes(tag)) tags.push(tag);
+        });
+        return tags.slice(0, 8);
+    }
+
+    function renderTagPreview() {
+        if (!tagPreview || !tagsInput) return;
+        const tags = normalizeTags(tagsInput.value);
+        tagPreview.replaceChildren();
+        tags.forEach((tag) => tagPreview.append(createElement("span", "tag-chip", tag)));
+        if (tags.length > 1) {
+            tagPreview.append(createElement("span", "tag-path", `→ ${tags.join(" / ")} / <langage>`));
+        }
+    }
+
+    if (tagsInput) tagsInput.addEventListener("input", renderTagPreview);
+
     function updateUploadButton() {
+        if (importOptions) importOptions.hidden = selectedFiles.length === 0;
         if (!uploadButton) return;
 
         uploadButton.hidden = selectedFiles.length === 0;
@@ -585,6 +588,43 @@ document.addEventListener("DOMContentLoaded", () => {
             : `Importer ${selectedFiles.length} fichier${selectedFiles.length !== 1 ? "s" : ""}`;
     }
 
+    function renderImportReport(report) {
+        if (!importReport) return;
+        importReport.replaceChildren();
+
+        const saved = report.saved || [];
+        const skipped = report.skipped || [];
+
+        const summary = createElement("p", "import-summary",
+            `${saved.length} script${saved.length > 1 ? "s" : ""} rangé${saved.length > 1 ? "s" : ""}` +
+            (skipped.length ? `, ${skipped.length} ignoré${skipped.length > 1 ? "s" : ""}` : ""));
+        summary.dataset.kind = saved.length ? "ok" : "error";
+        importReport.append(summary);
+
+        if (saved.length) {
+            const list = createElement("ul", "import-list");
+            saved.slice(0, 50).forEach((item) => {
+                list.append(createElement("li", "", `${item.path} (${item.language})`));
+            });
+            if (saved.length > 50) list.append(createElement("li", "", `… et ${saved.length - 50} autres`));
+            importReport.append(list);
+        }
+
+        if (skipped.length) {
+            const details = createElement("details", "import-skipped");
+            details.open = saved.length === 0;
+            details.append(createElement("summary", "", "Fichiers ignorés"));
+            const list = createElement("ul", "import-list");
+            skipped.slice(0, 100).forEach((item) => {
+                list.append(createElement("li", "", `${item.name} : ${item.reason}`));
+            });
+            details.append(list);
+            importReport.append(details);
+        }
+
+        importReport.hidden = false;
+    }
+
     async function uploadSelectedFiles() {
         if (isUploading || selectedFiles.length === 0) return;
 
@@ -592,43 +632,73 @@ document.addEventListener("DOMContentLoaded", () => {
         renderFiles();
         showMessage("Envoi des fichiers en cours...");
 
-        const formData = new FormData();
-
-        for (const file of selectedFiles) {
-            formData.append("files", file, file.name);
+        if (importAdminInput && importAdminInput.value.trim()) {
+            ICC.services.adminToken.set(importAdminInput.value.trim());
         }
 
         try {
-            const data = await apiRequest(`${API_BASE}/documents`, {
-                method: "POST",
-                body: formData,
-            });
-
-            const importedCount =
-                typeof data.imported === "number"
-                    ? data.imported
-                    : selectedFiles.length;
-
-            selectedFiles = [];
-            renderFiles();
-
-            showMessage(
-                `${importedCount} fichier${importedCount !== 1 ? "s importés" : " importé"} avec succès.`,
-                "success"
+            const report = await ICC.services.libraryImport(
+                selectedFiles,
+                tagsInput ? tagsInput.value : "",
+                {
+                    autoClassify: autoClassify ? autoClassify.checked : true,
+                    keepFolders: keepFolders ? keepFolders.checked : true,
+                },
             );
 
-            await loadDocuments();
+            const keep = selectedFiles.filter((file) =>
+                (report.skipped || []).some((item) => item.name === file.name));
+
+            selectedFiles = keep;
+            if (keep.length === 0 && tagsInput) {
+                tagsInput.value = "";
+                renderTagPreview();
+            }
+            renderFiles();
+            renderImportReport(report);
+            if (importAdmin) importAdmin.hidden = true;
+
+            showMessage(
+                report.saved_count > 0
+                    ? "Scripts rangés : ils seront disponibles dans la recherche dans quelques secondes."
+                    : "Aucun script n'a pu être rangé.",
+                report.saved_count > 0 ? "success" : "error"
+            );
         } catch (error) {
             console.error("Erreur d'import :", error);
 
-            showMessage(
-                describeApiError(error, "Import des fichiers"),
-                "error"
-            );
+            if (error.status === 401 && importAdmin) {
+                importAdmin.hidden = false;
+                showMessage("Jeton d'administration requis ou invalide.", "error");
+            } else {
+                showMessage(describeApiError(error, "Import des fichiers"), "error");
+            }
         } finally {
             isUploading = false;
             renderFiles();
         }
+    }
+
+    if (depotScan) {
+        depotScan.addEventListener("click", async () => {
+            depotScan.disabled = true;
+            try {
+                const report = await ICC.services.libraryScanDepot();
+                renderImportReport(report);
+                showMessage(`${report.saved_count} script(s) rangé(s) depuis la zone de dépôt.`, "success");
+            } catch (error) {
+                if (error.status === 401 && importAdmin) importAdmin.hidden = false;
+                showMessage(describeApiError(error, "Zone de dépôt"), "error");
+            } finally {
+                depotScan.disabled = false;
+            }
+        });
+    }
+
+    if (depotPath) {
+        ICC.services.libraryInfo()
+            .then((info) => { depotPath.textContent = info.depot; })
+            .catch(() => { /* jeton requis ou serveur sans bibliothèque : le chemin reste générique */ });
     }
 
     if (fileInput) {
@@ -658,28 +728,6 @@ document.addEventListener("DOMContentLoaded", () => {
                 addFiles(event.dataTransfer.files);
             }
         });
-    }
-
-    /* --------------------------------------------------
-       Liste des documents déjà indexés
-    -------------------------------------------------- */
-
-    async function loadDocuments() {
-        try {
-            const data = await apiRequest(`${API_BASE}/documents?limit=50&offset=0`);
-
-            // Cette liste pourra ensuite afficher les documents déjà
-            // présents dans la base, indépendamment des fichiers locaux.
-            console.debug("Documents récupérés :", data);
-
-            return data;
-        } catch (error) {
-            if (error.status !== 501) {
-                console.error("Impossible de récupérer les documents :", error);
-            }
-
-            return null;
-        }
     }
 
     /* --------------------------------------------------

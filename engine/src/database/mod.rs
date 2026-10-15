@@ -57,16 +57,19 @@ pub async fn get_pool() -> Result<&'static PgPool, sqlx::Error> {
     pool()
 }
 
-/// Récupère les statistiques et les sérialise en JSON pour Python.
-pub fn get_stats_json() -> Result<String, String> {
-    let runtime = RUNTIME.get_or_init(|| {
+/// Runtime Tokio partagé par les appels bloquants exposés à Python.
+pub fn runtime() -> &'static Runtime {
+    RUNTIME.get_or_init(|| {
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .expect("Impossible de créer le runtime Tokio")
-    });
+    })
+}
 
-    runtime.block_on(async {
+/// Récupère les statistiques et les sérialise en JSON pour Python.
+pub fn get_stats_json() -> Result<String, String> {
+    runtime().block_on(async {
         initialize()
             .await
             .map_err(|error| error.to_string())?;

@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Carte responsive</title>
+    <style>
+        :root { color-scheme: dark; --bg: #0b0d12; --card: #151a24; --accent: #8b7bff; }
+        body { margin: 0; padding: 2rem; background: var(--bg); color: #edf0f7; font-family: system-ui, sans-serif; }
+        .grid { display: grid; gap: 1rem; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); }
+        .card { padding: 1.25rem; border-radius: 14px; background: var(--card); border: 1px solid #252a38; }
+        .card h2 { margin: 0 0 .5rem; font-size: 1.1rem; }
+        .card a { color: var(--accent); }
+    </style>
+</head>
+<body>
+    <main class="grid">
+        <article class="card"><h2>Rapide</h2><p>Grille adaptative sans media query.</p><a href="#">En savoir plus</a></article>
+        <article class="card"><h2>Accessible</h2><p>Contraste correct et sémantique HTML.</p><a href="#">En savoir plus</a></article>
+        <article class="card"><h2>Simple</h2><p>Un seul fichier, aucune dépendance.</p><a href="#">En savoir plus</a></article>
+    </main>
+</body>
+</html>

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 
 use crate::database::documents::upsert_document;
 use crate::indexing::fingerprint::hash_content;
+use crate::indexing::health;
 
 const LANGUAGE_MARKER: &str = ".codecenter-language-dir";
 
@@ -44,6 +45,93 @@ fn language_for_extension(extension: &str) -> Option<Language> {
         name: language.0,
         slug: language.1,
     })
+}
+
+/// Taille maximale d'un fichier indexé (octets). Au-delà, il est ignoré
+/// et signalé dans le rapport de santé. Modifiable par
+/// `CODECENTER_MAX_FILE_BYTES`.
+fn max_file_bytes() -> u64 {
+    std::env::var("CODECENTER_MAX_FILE_BYTES")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(2_000_000)
+}
+
+/// Le rangement physique (déplacement dans `<catégorie>/<langage>/`) est
+/// activé par défaut. `CODECENTER_ORGANIZE=off` l'interdit : les fichiers
+/// sont alors indexés exactement là où ils se trouvent.
+fn organizing_enabled() -> bool {
+    !matches!(
+        std::env::var("CODECENTER_ORGANIZE")
+            .unwrap_or_default()
+            .trim()
+            .to_ascii_lowercase()
+            .as_str(),
+        "off" | "0" | "false" | "no" | "non"
+    )
+}
+
+/// Vérifie qu'on peut réellement écrire dans un dossier avec les droits
+/// du processus (les bits de permission seuls ne suffisent pas : ACL,
+/// groupes, systemd `ReadWritePaths`, montages en lecture seule…).
+fn directory_is_writable(directory: &Path) -> bool {
+    let probe = directory.join(format!(".codecenter-probe-{}", std::process::id()));
+    match fs::OpenOptions::new().write(true).create_new(true).open(&probe) {
+        Ok(_) => {
+            let _ = fs::remove_file(&probe);
+            true
+        }
+        Err(_) => false,
+    }
+}
+
+/// Range le fichier si c'est possible ; sinon le laisse en place.
+///
+/// Indexer un fichier ne doit jamais dépendre du droit de le déplacer :
+/// en cas de dossier non inscriptible ou d'erreur d'E/S pendant le
+/// rangement, on conserve le chemin d'origine (avertissement unique par
+/// dossier) au lieu de perdre le fichier pour la recherche.
+fn organize_or_keep(
+    path: &Path,
+    language: &Language,
+    content_sha256: &str,
+) -> Result<PathBuf, Box<dyn Error + Send + Sync>> {
+    let in_place = || -> Result<PathBuf, Box<dyn Error + Send + Sync>> { Ok(path.canonicalize()?) };
+
+    if !organizing_enabled() {
+        return in_place();
+    }
+
+    let parent = path.parent().ok_or("Dossier parent absent")?;
+    let marker = parent.join(LANGUAGE_MARKER);
+
+    // Déjà au bon endroit : aucune écriture nécessaire.
+    if marker.is_file() && fs::read_to_string(&marker).map(|m| m.trim() == language.slug).unwrap_or(false) {
+        return in_place();
+    }
+
+    if !directory_is_writable(parent) {
+        if health::note_read_only(parent) {
+            eprintln!(
+                "CodeCenter : {} n'est pas inscriptible par le service ; les fichiers y sont indexés sans être rangés \
+                 (voir docs/permissions.md).",
+                parent.display()
+            );
+        }
+        return in_place();
+    }
+    health::forget_read_only(parent);
+
+    match organize_file(path, language, content_sha256) {
+        Ok(organized) => Ok(organized),
+        Err(error) => {
+            eprintln!(
+                "CodeCenter : rangement impossible pour {} ({error}) ; indexation sur place.",
+                path.display()
+            );
+            in_place()
+        }
+    }
 }
 
 /// Déplace le fichier dans le sous-dossier du langage.
@@ -117,6 +205,7 @@ fn organize_file(
 /// Les dossiers marqués comme dossiers de langage ne deviennent pas des tags.
 fn categories_for_path(
     path: &Path,
+    language_slug: &str,
 ) -> Result<Vec<String>, Box<dyn Error + Send + Sync>> {
     let configured = std::env::var_os("CODECENTER_WATCH_PATHS")
         .ok_or("CODECENTER_WATCH_PATHS est absente")?;
@@ -137,8 +226,22 @@ fn categories_for_path(
     let mut current = root.to_path_buf();
     let mut categories = Vec::new();
 
-    for component in relative.components() {
+    let component_count = relative.components().count();
+
+    for (index, component) in relative.components().enumerate() {
         current.push(component);
+
+        // Dossier non rangé mais nommé comme le langage (`aes/python/`) :
+        // c'est un dossier de langage de fait, pas une catégorie.
+        let is_last = index + 1 == component_count;
+        if is_last
+            && component
+                .as_os_str()
+                .to_str()
+                .is_some_and(|name| name.eq_ignore_ascii_case(language_slug))
+        {
+            continue;
+        }
 
         if current.join(LANGUAGE_MARKER).is_file() {
             continue;
@@ -154,11 +257,22 @@ fn categories_for_path(
     Ok(categories)
 }
 
+/// Dossiers techniques jamais indexés : la zone de dépôt (`_depot`, vidée
+/// par l'API après rangement) et l'état du crawler (`.crawler`).
+fn is_ignored_path(path: &Path) -> bool {
+    path.ancestors().skip(1).any(|ancestor| {
+        ancestor
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name == "_depot" || name == ".crawler")
+    })
+}
+
 /// Indexe un fichier, le range par langage et synchronise PostgreSQL.
 pub async fn index_file(
     path: &Path,
 ) -> Result<bool, Box<dyn Error + Send + Sync>> {
-    if !path.is_file() {
+    if !path.is_file() || is_ignored_path(path) {
         return Ok(false);
     }
 
@@ -171,10 +285,16 @@ pub async fn index_file(
     let language = language_for_extension(&extension)
         .ok_or_else(|| format!("Langage non pris en charge : {extension}"))?;
 
+    let size = fs::metadata(path)?.len();
+    if size > max_file_bytes() {
+        health::record_skipped(path, &format!("fichier trop volumineux ({size} octets)"));
+        return Ok(false);
+    }
+
     let original_content = fs::read(path)?;
     let content_sha256 = hash_content(&original_content);
 
-    let organized_path = organize_file(path, &language, &content_sha256)?;
+    let organized_path = organize_or_keep(path, &language, &content_sha256)?;
 
     let content = fs::read(&organized_path)?;
     let content_sha256 = hash_content(&content);
@@ -186,9 +306,9 @@ pub async fn index_file(
         .and_then(|name| name.to_str())
         .unwrap_or("unknown");
 
-    let categories = categories_for_path(&organized_path)?;
+    let categories = categories_for_path(&organized_path, language.slug)?;
 
-    upsert_document(
+    let result = upsert_document(
         &storage_path,
         filename,
         &content_sha256,
@@ -199,7 +319,24 @@ pub async fn index_file(
         &categories,
     )
     .await
-    .map_err(|error| Box::new(error) as Box<dyn Error + Send + Sync>)
+    .map_err(|error| Box::new(error) as Box<dyn Error + Send + Sync>)?;
+
+    health::record_success(path, &organized_path);
+    Ok(result)
+}
+
+/// Indexe un fichier en enregistrant l'échec éventuel dans le registre
+/// de santé (consulté par l'API et utilisé pour les nouvelles tentatives).
+pub async fn index_file_tracked(
+    path: &Path,
+) -> Result<bool, Box<dyn Error + Send + Sync>> {
+    match index_file(path).await {
+        Ok(result) => Ok(result),
+        Err(error) => {
+            health::record_failure(path, &error.to_string());
+            Err(error)
+        }
+    }
 }
 
 /// Indique si l'extension est prise en charge.
@@ -208,4 +345,84 @@ pub fn is_supported_file(path: &Path) -> bool {
         .and_then(|extension| extension.to_str())
         .and_then(language_for_extension)
         .is_some()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    fn temp_dir(name: &str) -> PathBuf {
+        let dir = std::env::temp_dir().join(format!("icc-doc-{name}-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn running_as_root() -> bool {
+        fs::read_to_string("/proc/self/status")
+            .map(|s| s.lines().any(|l| l.starts_with("Uid:") && l.split_whitespace().nth(1) == Some("0")))
+            .unwrap_or(false)
+    }
+
+    fn python() -> Language {
+        language_for_extension("py").unwrap()
+    }
+
+    #[test]
+    fn writable_directory_gets_organized() {
+        let root = temp_dir("organize");
+        let file = root.join("a.py");
+        fs::write(&file, "print('x')\n").unwrap();
+        let result = organize_or_keep(&file, &python(), "abcdef1234").unwrap();
+        assert!(result.ends_with("python/a.py"), "{result:?}");
+        assert!(result.is_file());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn read_only_directory_keeps_file_in_place() {
+        if running_as_root() {
+            eprintln!("test ignoré : root contourne les permissions");
+            return;
+        }
+        let root = temp_dir("readonly");
+        let file = root.join("b.py");
+        fs::write(&file, "print('y')\n").unwrap();
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o555)).unwrap();
+
+        let result = organize_or_keep(&file, &python(), "abcdef1234");
+
+        fs::set_permissions(&root, fs::Permissions::from_mode(0o755)).unwrap();
+        let result = result.expect("l'indexation ne doit pas échouer");
+        assert_eq!(result, file.canonicalize().unwrap());
+        assert!(!root.join("python").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn depot_and_crawler_state_are_ignored() {
+        assert!(is_ignored_path(Path::new("/data/codes/_depot/a.py")));
+        assert!(is_ignored_path(Path::new("/data/codes/github/.crawler/x.json")));
+        assert!(!is_ignored_path(Path::new("/data/codes/api/python/a.py")));
+    }
+
+    #[test]
+    fn unwritable_probe_is_detected() {
+        assert!(!directory_is_writable(Path::new("/nonexistent-icc-dir")));
+    }
+
+    #[test]
+    fn language_named_folder_is_not_a_category() {
+        let root = temp_dir("categories");
+        let dir = root.join("crypto").join("aes").join("python");
+        fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("ctr.py");
+        fs::write(&file, "x = 1\n").unwrap();
+        // SAFETY : variable propre à ce test, lue seulement par la fonction testée.
+        unsafe { std::env::set_var("CODECENTER_WATCH_PATHS", &root) };
+        let categories = categories_for_path(&file, "python").unwrap();
+        assert_eq!(categories, vec!["crypto", "aes"]);
+        let _ = fs::remove_dir_all(&root);
+    }
 }

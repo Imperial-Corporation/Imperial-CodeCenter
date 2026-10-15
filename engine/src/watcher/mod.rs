@@ -95,8 +95,41 @@ pub async fn run(
     let _debouncer = debouncer;
 
 
+    // Nouvelles tentatives des fichiers en échec (toutes les 60 s) et
+    // passage de rattrapage complet optionnel (CODECENTER_RESCAN_SECS,
+    // 1800 s par défaut, 0 pour désactiver). Le passage de rattrapage
+    // ignore les fichiers inchangés ; il couvre les systèmes de fichiers
+    // où inotify est incomplet (NFS, montages réseau, dépôt par un autre
+    // utilisateur…).
+    let rescan_secs: u64 = std::env::var("CODECENTER_RESCAN_SECS")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .unwrap_or(1800);
+    let mut retry_timer = tokio::time::interval(Duration::from_secs(60));
+    retry_timer.tick().await;
+    let mut rescan_timer = tokio::time::interval(Duration::from_secs(rescan_secs.max(1)));
+    rescan_timer.tick().await;
+
     loop {
         tokio::select! {
+            _ = retry_timer.tick() => {
+                for path in crate::indexing::health::retry_candidates() {
+                    if !path.is_file() {
+                        crate::indexing::health::record_forget(&path);
+                        continue;
+                    }
+                    let _ = crate::indexing::document::index_file_tracked(&path).await;
+                }
+            }
+
+            _ = rescan_timer.tick(), if rescan_secs > 0 => {
+                for root in &roots {
+                    if let Err(error) = scanner::scan_directory(root).await {
+                        eprintln!("CodeCenter : échec du passage de rattrapage sur {} : {error}", root.display());
+                    }
+                }
+            }
+
             changed = shutdown.changed() => {
                 if changed.is_err() || *shutdown.borrow_and_update() {
                     println!("CodeCenter : arrêt de la surveillance demandé.");

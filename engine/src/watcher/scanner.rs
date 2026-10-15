@@ -1,6 +1,7 @@
 use std::path::Path;
 
-use crate::indexing::document::{index_file, is_supported_file};
+use crate::indexing::document::{index_file_tracked, is_supported_file};
+use crate::indexing::health;
 
 /// Parcourt récursivement un dossier et indexe les fichiers pris en charge.
 pub async fn scan_directory(
@@ -71,7 +72,12 @@ pub async fn scan_directory(
                 continue;
             }
 
-            if let Err(error) = index_file(&path).await {
+            // Passage de rattrapage : on ne relit pas ce qui n'a pas changé.
+            if health::is_unchanged(&path) {
+                continue;
+            }
+
+            if let Err(error) = index_file_tracked(&path).await {
                 eprintln!(
                     "CodeCenter : échec d'indexation de {} : {}",
                     path.display(),
@@ -103,5 +109,7 @@ fn should_skip_directory(path: &Path) -> bool {
             | "venv"
             | "build"
             | "dist"
+            | ".crawler"
+            | "_depot"
     )
 }

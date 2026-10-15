@@ -2,7 +2,8 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use crate::database::documents::remove_document_by_path;
-use crate::indexing::document::{index_file, is_supported_file};
+use crate::indexing::document::{index_file_tracked, is_supported_file};
+use crate::indexing::health;
 
 use super::events::FileAction;
 
@@ -13,7 +14,8 @@ pub async fn process_action(
     match action {
         FileAction::Upsert(path) => {
             if path.is_file() && is_supported_file(&path) {
-                match index_file(&path).await {
+                health::reset_attempts(&path);
+                match index_file_tracked(&path).await {
                     Ok(true) => {
                         println!(
                             "CodeCenter : document indexé ou actualisé : {}",
@@ -67,6 +69,7 @@ fn schedule_removal(path: PathBuf) {
 async fn remove_path(
     path: &PathBuf,
 ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
+    health::record_forget(path);
     let storage_path = path.to_string_lossy().into_owned();
 
     if remove_document_by_path(&storage_path).await? {
