@@ -1,3 +1,6 @@
+// Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+// Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 "use strict";
 
 /*
@@ -122,18 +125,25 @@
             });
         },
 
-        /* Bibliothèque : import avec tags (multipart), zone de dépôt, santé de l'index. */
-        libraryInfo: () => http("/library/info", { admin: true }),
-        libraryImport(files, tags, options = {}) {
-            const form = new FormData();
-            files.forEach((file) => form.append("files", file, file.name));
-            form.append("tags", tags || "");
-            form.append("auto_classify", String(options.autoClassify !== false));
-            form.append("keep_folders", String(options.keepFolders !== false));
-            return http("/library/import", { method: "POST", form, admin: true, signal: options.signal });
-        },
-        libraryScanDepot: () => http("/library/depot/scan", { method: "POST", admin: true }),
+        /* Identité du projet (version, origine, licence). */
+        about: () => http("/about"),
         indexHealth: () => http("/index/health", { admin: true }),
+
+        /* Comptes (cookie de session HttpOnly : rien à stocker côté navigateur). */
+        me: () => http("/auth/me"),
+        register: (username, password) => http("/auth/register", { method: "POST", body: { username, password } }),
+        login: (username, password) => http("/auth/login", { method: "POST", body: { username, password } }),
+        logout: () => http("/auth/logout", { method: "POST" }),
+        changePassword: (current, next) => http("/auth/password", { method: "POST", body: { current, new: next } }),
+        deleteAccount: (password) => http("/auth/delete", { method: "POST", body: { password } }),
+
+        /* Discussions enregistrées. */
+        chats: () => http("/chats"),
+        saveChat: (conversationId, title) =>
+            http("/chats", { method: "POST", body: { conversation_id: conversationId, title: title || null } }),
+        openChat: (id) => http(`/chats/${encodeURIComponent(id)}/open`, { method: "POST" }),
+        renameChat: (id, title) => http(`/chats/${encodeURIComponent(id)}`, { method: "PATCH", body: { title } }),
+        deleteChat: (id) => http(`/chats/${encodeURIComponent(id)}`, { method: "DELETE" }),
 
         /* Crawler GitHub. */
         crawlerStatus: () => http("/crawler", { admin: true }),

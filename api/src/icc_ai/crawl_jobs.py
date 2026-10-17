@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Pilotage du crawler GitHub depuis l'API : lancement, planification, arrêt.
 
 Le crawler tourne dans un sous-processus (`python -m icc_crawler`) : on peut

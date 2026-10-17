@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Stockage persistant de la configuration globale des fournisseurs.
 
 Un seul fournisseur est actif pour toute l'instance ; la configuration de

@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Ligne de commande : `icc-crawler crawl|stats|export-manifest|disk-check`."""
 
 from __future__ import annotations
@@ -100,8 +103,10 @@ def build_parser() -> argparse.ArgumentParser:
         prog="icc-crawler",
         description="Collecte des scripts sous licence permissive depuis GitHub et les range "
                     "automatiquement dans le dossier surveillé d'Imperial CodeCenter.",
+        epilog="Basé sur Imperial CodeCenter, créé par Imperial — https://imperial-corporation.pages.dev/icc "
+               "· Imperial Community License 1.0",
     )
-    parser.add_argument("--version", action="version", version=f"icc-crawler {__version__}")
+    parser.add_argument("--version", action="version", version=f"icc-crawler {__version__} — Imperial CodeCenter, par Imperial (https://imperial-corporation.pages.dev/icc)")
     parser.add_argument("-v", "--verbose", action="store_true", help="journal détaillé (sur stderr)")
     sub = parser.add_subparsers(dest="command", required=True)
 

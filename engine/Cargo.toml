@@ -1,7 +1,14 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 [package]
 name = "codecenter-engine"
-version = "1.0.0"
+version = "1.0.1"
 edition = "2024"
+license-file = "LICENSE"
+authors = ["Imperial <https://imperial-corporation.pages.dev/icc>"]
+homepage = "https://imperial-corporation.pages.dev/icc"
+description = "Moteur d'indexation et de recherche d'Imperial CodeCenter"
 
 [lib]
 name = "codecenter_engine"

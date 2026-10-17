@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 # Copie les scripts d'exemple (examples/codes) dans le dossier surveillé.
 #
 # Usage : install_examples.sh <dossier_surveillé> [--force]

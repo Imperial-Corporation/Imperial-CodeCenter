@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -61,23 +64,11 @@ sudo apt-get install -y \
     python3-dev \
     python3-venv
 
-echo "==> [2/6] Installation de Rust si nécessaire..."
+echo "==> [2/6] Installation de Rust (rustup, rustc, cargo) si nécessaire..."
 
-if ! command -v cargo >/dev/null 2>&1; then
-    if [[ -x "$HOME/.cargo/bin/rustup" ]]; then
-        "$HOME/.cargo/bin/rustup" toolchain install stable
-        "$HOME/.cargo/bin/rustup" default stable
-    else
-        curl --proto '=https' --tlsv1.2 -sSf \
-            https://sh.rustup.rs |
-            sh -s -- -y --profile minimal
-    fi
-fi
-
-export PATH="$HOME/.cargo/bin:$PATH"
-
-command -v cargo >/dev/null 2>&1 ||
-    die "Installation de Cargo échouée."
+# shellcheck source=/dev/null
+source "$ROOT/scripts/lib/toolchain.sh"
+ensure_rust
 
 echo "==> [3/6] Installation de uv si nécessaire..."
 

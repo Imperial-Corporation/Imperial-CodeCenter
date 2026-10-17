@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Assemblage des services IA (configuration, moteur, orchestrateur)."""
 
 from __future__ import annotations
@@ -7,6 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .config.crypto import SecretBox
+from .accounts import AccountStore
 from .chat import ChatService
 from .config.store import ConfigStore
 from .crawl_jobs import CrawlManager
@@ -26,6 +30,7 @@ class AIServices:
     chat: ChatService | None = None
     library: Library | None = None
     crawler: CrawlManager | None = None
+    accounts: AccountStore | None = None
 
     def __post_init__(self) -> None:
         if self.chat is None:  # le chat s'appuie toujours sur le même pipeline de recherche
@@ -45,4 +50,5 @@ def build_services(engine: EngineGateway | None = None) -> AIServices:
     search = SearchService(store, engine)
     library = Library.from_environment(data_dir())
     crawler = CrawlManager(data_dir(), library.root, box)
-    return AIServices(store, engine, search, ChatService(search), library, crawler)
+    accounts = AccountStore.from_environment(data_dir())
+    return AIServices(store, engine, search, ChatService(search), library, crawler, accounts)

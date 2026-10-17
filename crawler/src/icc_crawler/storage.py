@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Stockage : fichiers rangés dans le dossier surveillé + base de suivi SQLite.
 
 Le dossier surveillé ne reçoit que du code (`<dest>/<catégorie>/<fichier>`),

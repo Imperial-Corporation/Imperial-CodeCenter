@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """ChatService : conversations, registre de sources stable, historique, limites, profondeur."""
 
 import asyncio
@@ -412,7 +415,7 @@ def test_overview_limite_recherche_fichiers_et_outils(build):
     response = search(chat, "comment lire un fichier json", limit=10)
     assert response.meta.depth == "overview"
     assert search_calls(engine)[0][2] == 6  # plafond de recherche
-    assert len(read_calls(engine)) == 3  # fichiers joints d'emblée
+    assert len(read_calls(engine)) == 2  # fichiers joints d'emblée
     assert response.meta.tool_calls == 2  # plafond d'outils
     tool_messages = [m for m in provider.calls[1]["messages"] if m.role == "tool"]
     assert len(tool_messages) == 3 and "limite d'appels d'outils atteinte" in tool_messages[2].content
@@ -434,7 +437,7 @@ def test_deep_ne_limite_pas(build):
 def test_focused_plafond_de_fichiers_joints(build):
     chat, engine = build(FakeProvider([turn(answer(used=[]))]), engine=FakeEngine(many_documents()))
     response = search(chat, "json dumps() utiliser", limit=10)
-    assert response.meta.depth == "focused" and len(read_calls(engine)) == 6
+    assert response.meta.depth == "focused" and len(read_calls(engine)) == 5
     assert search_calls(engine)[0][2] == 10
 
 

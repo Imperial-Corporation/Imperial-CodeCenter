@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +15,9 @@ die() {
 
 [[ $EUID -ne 0 ]] || die "Lance ce script sans sudo."
 command -v sudo >/dev/null 2>&1 || die "sudo est requis."
-command -v cargo >/dev/null 2>&1 || die "cargo est introuvable."
+# shellcheck source=/dev/null
+source "$ROOT/scripts/lib/toolchain.sh"
+ensure_rust   # installe rustup, rustc et cargo s'ils manquent
 command -v python3 >/dev/null 2>&1 || die "python3 est introuvable."
 command -v psql >/dev/null 2>&1 || die "psql est introuvable."
 [[ -f "$CONFIG" ]] || die "config/deploy.conf introuvable."

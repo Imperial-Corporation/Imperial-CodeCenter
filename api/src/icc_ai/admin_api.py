@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Routes d'administration : import de fichiers, crawler, santé de l'index.
 
 Toutes exigent les mêmes garanties que la configuration IA (jeton

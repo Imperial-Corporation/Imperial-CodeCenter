@@ -1,0 +1,504 @@
+IMPERIAL COMMUNITY LICENSE (ICL) — Version 1.0
+Licence Communautaire Imperial — Version 1.0
+
+Copyright (c) Imperial — https://imperial-corporation.pages.dev/icc
+Projet : Imperial CodeCenter
+
+Le texte français fait foi. A courtesy English translation follows the French
+text (Part II); if the two differ, the French text prevails.
+
+NOTE IMPORTANTE. Cette licence est une licence personnalisée. Elle n'est PAS
+approuvée par l'Open Source Initiative et ne répond pas à la définition de
+l'« Open Source » (elle interdit certains usages : voir l'article 5). Elle est
+libre au sens où tout le code reste public, modifiable et gratuit. Elle est
+incompatible avec la plupart des autres licences : ne mélange pas ce projet
+avec du code dont la licence impose des conditions contraires. Fais relire ce
+texte par un juriste avant tout usage à enjeu.
+
+================================================================================
+PARTIE I — TEXTE FRANÇAIS
+================================================================================
+
+Article 1 — Définitions
+
+1.1  « Logiciel » : Imperial CodeCenter, c'est-à-dire l'ensemble des fichiers
+     distribués avec cette licence (code source du moteur, de l'API, du
+     collecteur, de l'interface, des scripts, des exemples, de la
+     documentation, des images et des fichiers de configuration), dans toutes
+     ses versions.
+
+1.2  « Imperial » : l'organisation Imperial, à l'origine du Logiciel, et ses
+     contributeurs. Site officiel : https://imperial-corporation.pages.dev/icc
+
+1.3  « Vous » : toute personne physique ou morale qui exerce des droits sous
+     cette licence. Une personne morale inclut les entités qu'elle contrôle.
+
+1.4  « Œuvre Dérivée » : toute œuvre qui contient, reprend, traduit, adapte,
+     transforme ou modifie tout ou partie du Logiciel, y compris un fork, un
+     portage dans un autre langage, ou une version à laquelle du code est
+     ajouté ou retiré.
+
+1.5  « Programme Utilisateur » : tout logiciel, service, script, module,
+     plugin, extension, application, site, bibliothèque ou système qui
+     incorpore le Logiciel, l'appelle, l'importe, s'y lie (statiquement ou
+     dynamiquement), l'embarque, l'exécute, dépend de lui pour fonctionner, ou
+     communique avec lui par une interface propre au Logiciel (API, CLI,
+     bibliothèque Python, module Rust, protocole interne), à l'exclusion d'un
+     simple navigateur web ou client HTTP générique utilisé par un utilisateur
+     final pour consulter une instance.
+
+1.6  « Œuvre Combinée » : le Logiciel ou une Œuvre Dérivée, ensemble avec tous
+     les Programmes Utilisateurs.
+
+1.7  « Source » : la forme préférée pour modifier une œuvre : fichiers
+     lisibles et complets, scripts de construction, de test et d'installation,
+     documentation. Un code obfusqué, minifié sans source, chiffré, compilé
+     seul ou volontairement rendu difficile à lire n'est pas du Source.
+
+1.8  « Projet Payant » : tout programme, produit, service, site, application,
+     plateforme, base, projet ou activité (a) dont l'accès, l'usage, une
+     fonction, une version, du contenu, de l'hébergement, du support, de la
+     maintenance ou de la formation est vendu, loué, facturé, abonné, vendu
+     par lots ou conditionné à un paiement, ou (b) financé en tout ou partie
+     par de la publicité, la revente de données, un abonnement, des
+     commissions ou toute autre contrepartie financière liée à l'usage du
+     Logiciel, ou (c) intégré à une offre commerciale payante, même gratuite en
+     apparence (« freemium », « essai gratuit », « version communautaire »
+     accompagnant une version payante), ou (d) distribué ou exploité par une
+     personne morale poursuivant un but lucratif au titre de son activité
+     commerciale.
+
+1.9  « Dons » : versements volontaires et sans contrepartie. Un don n'est pas un
+     paiement au sens de l'article 1.8 s'il ne conditionne aucun accès, aucune
+     fonction, aucun avantage, aucune priorité ni aucun support.
+
+1.10 « Communiquer » : distribuer, publier, copier, transmettre, héberger ou
+     mettre à disposition de tiers par quelque moyen que ce soit, y compris
+     par accès réseau (service en ligne, SaaS, API publique).
+
+Article 2 — Licence accordée
+
+Sous réserve du respect de toutes les conditions ci-dessous, Imperial Vous
+accorde, pour le monde entier, sans redevance, non exclusive et irrévocable
+(sauf résiliation prévue à l'article 12), le droit de :
+
+  a) utiliser le Logiciel, à toute fin non interdite par l'article 5 ;
+  b) l'étudier, le copier et le reproduire ;
+  c) le modifier et créer des Œuvres Dérivées ;
+  d) Communiquer le Logiciel et les Œuvres Dérivées, modifiés ou non.
+
+Tous les droits non expressément accordés sont réservés.
+
+Article 3 — Attribution obligatoire (origine Imperial)
+
+3.1  Vous devez conserver, dans toute copie, tout Programme Utilisateur et toute
+     Œuvre Dérivée : (i) le texte intégral de cette licence ; (ii) le fichier
+     NOTICE ; (iii) les mentions de droits d'auteur, de licence et d'origine
+     figurant dans les fichiers.
+
+3.2  Vous devez indiquer clairement et visiblement que l'œuvre est « basée sur
+     Imperial CodeCenter, créé par Imperial » avec le lien
+     https://imperial-corporation.pages.dev/icc, à chacun des endroits suivants
+     lorsqu'ils existent : la page d'accueil du dépôt ou du projet (README), la
+     documentation, la page « À propos » ou le pied de page de l'interface
+     utilisateur, l'écran d'aide ou l'option de version en ligne de commande,
+     et la description du paquet publié. La mention doit rester lisible
+     (taille, contraste et emplacement raisonnables) et ne peut pas être
+     cachée, rendue illisible ni retirée.
+
+3.3  Vous devez indiquer l'origine du dépôt : le nom de l'organisation (Imperial)
+     et l'adresse du projet d'origine (celle du site ci-dessus ou celle du
+     dépôt officiel qu'Imperial y publie). Si Vous publiez une Œuvre Dérivée,
+     Vous devez en outre indiquer qu'elle a été modifiée, par qui, et décrire
+     les modifications importantes (journal des modifications, historique de
+     versions ou notice).
+
+3.4  Les noms « Imperial » et « Imperial CodeCenter », le logo et les visuels
+     d'Imperial ne Vous sont pas concédés comme marques. Une Œuvre Dérivée doit
+     porter un nom qui la distingue clairement de l'original et ne doit pas
+     laisser croire qu'elle est publiée, approuvée ou soutenue par Imperial,
+     sauf accord écrit.
+
+3.5  Les crédits des personnes (développeur en chef, idée originale,
+     contributeurs) listés dans les fichiers de crédits doivent être conservés.
+
+Article 4 — Code ouvert obligatoire (pas de code privé ni caché)
+
+4.1  Toute Œuvre Combinée que Vous Communiquez — y compris par accès réseau —
+     doit être mise à disposition de tous, gratuitement, avec son Source
+     complet, sous la présente licence (« réciprocité »). Cela vise
+     notamment tout Programme Utilisateur : aucun code qui utilise le
+     Logiciel ne peut rester privé, fermé, chiffré, obfusqué ou secret dès
+     lors que l'Œuvre Combinée est Communiquée à un tiers, y compris sous la
+     forme d'un service accessible par un réseau.
+
+4.2  Pour un service accessible par réseau, les utilisateurs de ce service
+     doivent pouvoir obtenir le Source correspondant, par exemple via un lien
+     visible dans l'interface, à la même adresse ou via la page « À propos ».
+
+4.3  Le Source doit être publié au plus tard au moment de la première
+     Communication, rester accessible tant que l'Œuvre est Communiquée et au
+     moins trois (3) ans après la dernière Communication, et être fourni sans
+     condition d'inscription, de paiement, d'accord de confidentialité ou de
+     clause restrictive.
+
+4.4  Vous ne pouvez imposer aucune restriction supplémentaire aux droits
+     accordés par cette licence : pas de licence plus restrictive, pas de
+     mesure technique visant à empêcher la copie ou la modification
+     (verrouillage, DRM, signatures obligatoires à l'exécution), pas de clause
+     contractuelle contraire, pas de brevet opposé aux bénéficiaires.
+
+4.5  Usage purement privé : si Vous exécutez ou modifiez le Logiciel pour
+     Vous-même, sans le Communiquer à quiconque, Vous n'avez pas à publier Vos
+     modifications ni Vos Programmes Utilisateurs. La publication est exigée
+     dès la première Communication à un tiers. L'usage au sein d'une même
+     organisation (employés, membres) vaut Communication : voir l'article 5.
+
+Article 5 — Usages interdits : aucun Projet Payant, tout doit être gratuit
+
+5.1  Il est interdit d'utiliser, d'intégrer, de modifier, de copier, de
+     Communiquer ou d'exécuter le Logiciel, une Œuvre Dérivée ou une Œuvre
+     Combinée dans, avec, pour ou au bénéfice d'un Projet Payant.
+
+5.2  Le Logiciel, les Œuvres Dérivées, les Programmes Utilisateurs et toute
+     Œuvre Combinée doivent être mis à disposition gratuitement, sans
+     condition de paiement, d'abonnement, d'inscription payante, de publicité
+     imposée, de collecte de données comme contrepartie ni de version
+     « premium » ou réservée. Seuls les Dons sont tolérés.
+
+5.3  Il est interdit de vendre ou de facturer le Logiciel ou une Œuvre
+     Combinée, de facturer l'accès, l'hébergement, l'installation, la
+     configuration, le support, la maintenance, la formation ou des
+     fonctionnalités liées à l'usage du Logiciel, et de proposer le Logiciel
+     comme élément d'un bien ou service payant (y compris dans un pack,
+     un abonnement, une marketplace payante, un matériel vendu avec le
+     Logiciel préinstallé, ou un service d'intégration facturé à un client).
+     Le remboursement des seuls frais réels et justifiés de support physique
+     (par exemple un support de stockage envoyé par la poste), sans marge,
+     est toléré.
+
+5.4  Usage interne d'une organisation : une entreprise, une association ou une
+     administration peut utiliser une instance du Logiciel en interne, à
+     condition que (i) l'usage ne soit lié à aucun Projet Payant, (ii) rien ne
+     soit facturé à quiconque au titre de cet usage, (iii) l'article 4 soit
+     respecté pour tout ce qui est Communiqué (en interne comme en externe),
+     et (iv) les articles 3 et 6 soient respectés.
+
+5.5  Sont expressément autorisés, s'ils respectent les autres articles :
+     l'usage personnel, pédagogique, scientifique, associatif à but non
+     lucratif et communautaire gratuit ; la publication de Œuvres Dérivées
+     gratuites ; la participation à des concours ou démonstrations sans prix en
+     espèces pour l'usage du Logiciel.
+
+5.6  Il est interdit de contourner cet article par des montages (filiale,
+     prête-nom, licence croisée, double licence, ou service tiers fournissant
+     la contrepartie payante à Votre place) ou en fractionnant l'offre.
+
+5.7  Les modèles d'IA, les fournisseurs et les services tiers que le Logiciel
+     appelle (par exemple une API d'IA facturée à l'usage) ne rendent pas le
+     Logiciel payant : leurs propres tarifs ne sont pas visés par le présent
+     article, à condition que Vous ne revendiez pas cet accès avec le Logiciel
+     et que Vous n'en tiriez aucune marge.
+
+Article 6 — Transparence des modifications et contributions
+
+6.1  Toute modification que Vous Communiquez doit porter une mention bien visible
+     de la modification et de sa date.
+
+6.2  Sauf accord écrit contraire, toute contribution que Vous soumettez
+     volontairement à Imperial pour inclusion dans le Logiciel est
+     concédée sous la présente licence (« entrant = sortant »). Vous garantissez
+     avoir le droit de la soumettre. Imperial peut la publier, la modifier ou
+     la refuser.
+
+Article 7 — Composants tiers et contenus
+
+7.1  Le Logiciel utilise ou peut télécharger des composants tiers (bibliothèques
+     Python, crates Rust, polices, code récupéré par le collecteur sur GitHub,
+     exemples) qui restent soumis à leurs propres licences. Cette licence ne
+     remplace pas la leur et n'accorde aucun droit sur eux. Il Vous appartient
+     de respecter ces licences (notamment leurs mentions de droits d'auteur).
+
+7.2  Le code collecté par le collecteur reste la propriété de ses auteurs et
+     soumis à sa licence d'origine. Vous restez responsable de l'usage et de la
+     redistribution de ce code.
+
+7.3  Les réponses générées par un modèle d'IA, les données indexées et les
+     contenus que Vous ajoutez ne sont pas couverts par cette licence ; Vous en
+     êtes seul responsable.
+
+Article 8 — Brevets
+
+8.1  Chaque contributeur Vous accorde une licence de brevet mondiale, gratuite,
+     non exclusive et irrévocable (sauf article 12) sur les revendications de
+     brevet qu'il détient et qui sont nécessairement contrefaites par sa
+     contribution, pour exercer les droits de l'article 2.
+
+8.2  Si Vous engagez une action en justice alléguant que le Logiciel contrefait
+     un brevet, les droits que Vous tenez de cette licence prennent fin à la
+     date de l'action.
+
+Article 9 — Absence de garantie
+
+LE LOGICIEL EST FOURNI « EN L'ÉTAT », SANS GARANTIE D'AUCUNE SORTE, EXPRESSE OU
+IMPLICITE, NOTAMMENT DE QUALITÉ MARCHANDE, D'ADÉQUATION À UN USAGE PARTICULIER,
+DE SÉCURITÉ, D'EXACTITUDE, DE DISPONIBILITÉ OU D'ABSENCE DE CONTREFAÇON, DANS
+LES LIMITES AUTORISÉES PAR LA LOI. LES RÉPONSES PRODUITES PAR L'IA PEUVENT ÊTRE
+FAUSSES : VÉRIFIE-LES AVANT DE LES UTILISER.
+
+Article 10 — Limitation de responsabilité
+
+DANS LES LIMITES AUTORISÉES PAR LA LOI, IMPERIAL ET SES CONTRIBUTEURS NE SONT
+PAS RESPONSABLES DES DOMMAGES DIRECTS OU INDIRECTS, PERTES DE DONNÉES, DE
+PROFITS, INTERRUPTIONS, FAILLES DE SÉCURITÉ OU AUTRES DOMMAGES RÉSULTANT DE
+L'USAGE OU DE L'IMPOSSIBILITÉ D'USAGE DU LOGICIEL, MÊME S'ILS ONT ÉTÉ AVERTIS
+DE LEUR POSSIBILITÉ. RIEN DANS CETTE LICENCE N'EXCLUT UNE RESPONSABILITÉ QUI NE
+PEUT PAS ÊTRE EXCLUE PAR LA LOI (FAUTE LOURDE OU DOL, DOMMAGE CORPOREL…).
+
+Article 11 — Responsabilité de l'utilisateur
+
+Vous êtes seul responsable du respect des lois applicables à Votre usage
+(protection des données personnelles, droit d'auteur, contrôle des
+exportations, règles de sécurité, conditions des fournisseurs d'IA et de
+GitHub). Vous devez protéger les secrets (clés d'API, jetons, mots de passe) et
+les comptes de Vos utilisateurs.
+
+Article 12 — Durée et résiliation
+
+12.1 La licence dure tant que Vous respectez ses conditions.
+
+12.2 En cas de manquement, la licence prend fin automatiquement. Elle est rétablie
+     (a) à titre provisoire dès que Vous cessez tout manquement, et (b)
+     définitivement si Imperial ne Vous notifie pas le manquement dans les
+     60 jours suivant la cessation. Si Imperial Vous notifie un manquement
+     pour la première fois, la licence est rétablie définitivement si Vous le
+     corrigez dans les 30 jours suivant la notification.
+
+12.3 La résiliation n'affecte pas les droits de ceux qui ont reçu le Logiciel de
+     Vous tant qu'eux-mêmes respectent la licence : ils reçoivent leur licence
+     directement d'Imperial.
+
+12.4 Un manquement aux articles 3, 4 ou 5 peut aussi donner lieu à l'exécution
+     forcée (retrait, publication du Source, cessation) et aux réparations
+     prévues par la loi.
+
+Article 13 — Distribution, sous-licence et versions
+
+13.1 Chaque destinataire reçoit sa licence directement d'Imperial. Vous ne pouvez
+     pas concéder de sous-licence à des conditions différentes.
+
+13.2 Imperial peut publier de nouvelles versions de cette licence. Une œuvre
+     reçue sous la version 1.0 reste utilisable sous la version 1.0.
+
+13.3 Vous pouvez Communiquer le Logiciel sous la présente licence uniquement.
+     La double licence, la relicenciation et la licence payante sont interdites.
+
+Article 14 — Interprétation et droit applicable
+
+14.1 Si une clause est invalide ou inapplicable, elle est appliquée dans la mesure
+     du possible et les autres clauses restent en vigueur. Une renonciation à
+     un droit n'est valable que si elle est écrite.
+
+14.2 Les titres sont indicatifs. « Y compris » signifie « y compris sans
+     limitation ». Le singulier inclut le pluriel.
+
+14.3 Cette licence est le seul accord entre les parties au sujet du Logiciel.
+
+14.4 Cette licence est régie par le droit français, sous réserve des règles
+     impératives du pays de résidence du bénéficiaire. Les tribunaux
+     compétents sont ceux désignés par le droit commun français, sauf règle
+     impérative contraire.
+
+14.5 Imperial n'est pas tenu d'assurer un support, des correctifs ou des mises à
+     jour.
+
+Article 15 — Mention à reprendre (modèle)
+
+Dans la documentation et l'interface de tout projet soumis à cette licence :
+
+  « Basé sur Imperial CodeCenter, créé par Imperial —
+    https://imperial-corporation.pages.dev/icc — Imperial Community License 1.0 »
+
+En-tête de fichier recommandé :
+
+  Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+  Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE).
+
+================================================================================
+PART II — ENGLISH TRANSLATION (courtesy; the French text prevails)
+================================================================================
+
+IMPORTANT NOTE. This is a custom license. It is NOT approved by the Open Source
+Initiative and does not meet the "Open Source" definition (it forbids certain
+uses: see Article 5). It is "free" in the sense that all code stays public,
+modifiable and free of charge. It is incompatible with most other licenses: do
+not mix this project with code under conflicting terms. Have a lawyer review
+this text before any high-stakes use.
+
+1. Definitions.
+ "Software": Imperial CodeCenter and every file distributed under this license
+ (engine, API, crawler, interface, scripts, examples, documentation, images,
+ configuration), in all versions. "Imperial": the Imperial organization and its
+ contributors (https://imperial-corporation.pages.dev/icc). "You": any person
+ or entity exercising rights under this license. "Derivative Work": any work
+ that contains, adapts, translates, ports or modifies any part of the
+ Software, including forks. "User Program": any software, service, script,
+ module, plugin, application, website, library or system that incorporates,
+ calls, imports, links to (statically or dynamically), embeds, runs, depends on
+ or communicates with the Software through an interface specific to the
+ Software (API, CLI, Python library, Rust module, internal protocol), excluding
+ a generic web browser or HTTP client used by an end user to access an instance.
+ "Combined Work": the Software or a Derivative Work together with all User
+ Programs. "Source": the preferred form for making modifications, complete and
+ readable, with build, test and installation scripts and documentation;
+ obfuscated, minified-only, encrypted or compiled-only code is not Source.
+ "Paid Project": any program, product, service, site, application, platform,
+ project or activity (a) whose access, use, feature, version, content, hosting,
+ support, maintenance or training is sold, rented, billed, subscribed or
+ conditioned on payment, (b) funded in whole or part by advertising, data
+ resale, subscriptions, commissions or any financial consideration tied to the
+ use of the Software, (c) bundled in a paid commercial offer, even if apparently
+ free ("freemium", free trial, a "community edition" accompanying a paid
+ edition), or (d) distributed or operated by a for-profit legal entity as part
+ of its commercial activity. "Donations": voluntary payments without
+ consideration; not a payment under (a) if they condition no access, feature,
+ benefit, priority or support. "Convey": distribute, publish, copy, transmit,
+ host or make available to third parties by any means, including network
+ access (online service, SaaS, public API).
+
+2. Grant. Subject to all conditions, Imperial grants You a worldwide,
+ royalty-free, non-exclusive, irrevocable (except under Article 12) license to
+ use the Software for any purpose not forbidden by Article 5, study, copy and
+ reproduce it, modify it and create Derivative Works, and Convey the Software
+ and Derivative Works, modified or not. All other rights are reserved.
+
+3. Mandatory attribution. You must keep in every copy, User Program and
+ Derivative Work: the full license text, the NOTICE file, and the copyright,
+ license and origin notices in files. You must clearly and visibly state that
+ the work is "based on Imperial CodeCenter, created by Imperial" with the link
+ https://imperial-corporation.pages.dev/icc in: the project README or home
+ page, the documentation, the About page or footer of the user interface, the
+ help screen or command-line version output, and the published package
+ description, where they exist. The notice must remain legible and may not be
+ hidden, made unreadable or removed. You must state the origin of the
+ repository (the organization name, Imperial, and the address of the original
+ project: the website above or the official repository published there). For a
+ Derivative Work, you must also state that it was modified, by whom, and
+ describe significant changes. The names "Imperial" and "Imperial CodeCenter",
+ the logo and visuals are not licensed as trademarks; a Derivative Work must
+ have a name clearly distinct from the original and must not suggest approval
+ or endorsement by Imperial without written agreement. Credits of people
+ listed in credit files must be kept.
+
+4. Mandatory open code (no private or hidden code). Any Combined Work that You
+ Convey — including through network access — must be made available to
+ everyone, free of charge, with its complete Source, under this license
+ ("reciprocity"). This applies in particular to every User Program: no code
+ that uses the Software may remain private, closed, encrypted, obfuscated or
+ secret once the Combined Work is Conveyed to a third party, including as a
+ network-accessible service. Users of a network service must be able to obtain
+ the corresponding Source (for example via a visible link in the interface).
+ Source must be published no later than the first Conveyance, stay available
+ as long as the work is Conveyed and for at least three (3) years afterwards,
+ and be provided without registration, payment, NDA or restrictive clause. You
+ may not impose any additional restriction: no more restrictive license, no
+ technical measure preventing copying or modification (locking, DRM, mandatory
+ runtime signatures), no contrary contract clause, no patent asserted against
+ recipients. Purely private use: if You run or modify the Software for Yourself
+ without Conveying it to anyone, You need not publish Your changes or User
+ Programs; publication is required upon first Conveyance to a third party. Use
+ within an organization (employees, members) counts as Conveyance: see Article 5.
+
+5. Forbidden uses: no Paid Project; everything must be free. It is forbidden
+ to use, integrate, modify, copy, Convey or run the Software, a Derivative Work
+ or a Combined Work in, with, for or for the benefit of a Paid Project. The
+ Software, Derivative Works, User Programs and any Combined Work must be made
+ available free of charge, without any condition of payment, subscription,
+ paid registration, mandatory advertising, data collection as consideration or
+ "premium"/reserved version. Only Donations are tolerated. It is forbidden to
+ sell or charge for the Software or a Combined Work; to charge for access,
+ hosting, installation, configuration, support, maintenance, training or
+ features related to the use of the Software; or to offer the Software as part
+ of a paid good or service (including a bundle, subscription, paid
+ marketplace, hardware sold with the Software preinstalled, or an integration
+ service billed to a customer). Reimbursement of the actual, documented cost of
+ a physical medium (for example a shipped storage device), without margin, is
+ tolerated. Internal organizational use: a company, association or public body
+ may use an instance internally provided that (i) the use is tied to no Paid
+ Project, (ii) nothing is charged to anyone for this use, (iii) Article 4 is
+ respected for everything Conveyed (internally or externally), and (iv)
+ Articles 3 and 6 are respected. Expressly allowed, if the other articles are
+ respected: personal, educational, scientific, non-profit associative and free
+ community use; publication of free Derivative Works; contests or
+ demonstrations with no cash prize for use of the Software. It is forbidden to
+ circumvent this Article through structures (subsidiary, nominee, cross-license,
+ dual license, or a third-party service providing the paid consideration in
+ Your place) or by splitting the offer. Third-party AI models, providers and
+ services that the Software calls (for example a pay-per-use AI API) do not
+ make the Software paid: their own prices are not covered by this Article,
+ provided You do not resell that access with the Software or draw any margin.
+
+6. Transparency and contributions. Every modification You Convey must carry a
+ clearly visible notice of the modification and its date. Unless otherwise
+ agreed in writing, any contribution You voluntarily submit to Imperial for
+ inclusion in the Software is licensed under this license ("inbound =
+ outbound"); You warrant You have the right to submit it. Imperial may
+ publish, modify or decline it.
+
+7. Third-party components and content. The Software uses or may download
+ third-party components (Python libraries, Rust crates, fonts, code fetched by
+ the crawler from GitHub, examples) that remain under their own licenses; this
+ license does not replace them and grants no rights over them. Code collected
+ by the crawler remains the property of its authors under its original
+ license. AI-generated answers, indexed data and content You add are not
+ covered by this license; You are solely responsible for them.
+
+8. Patents. Each contributor grants You a worldwide, royalty-free,
+ non-exclusive, irrevocable (except Article 12) patent license over patent
+ claims necessarily infringed by their contribution, to exercise the rights of
+ Article 2. If You sue alleging that the Software infringes a patent, Your
+ rights under this license end on the date of the suit.
+
+9. No warranty. THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ EXPRESS OR IMPLIED, INCLUDING MERCHANTABILITY, FITNESS FOR A PARTICULAR
+ PURPOSE, SECURITY, ACCURACY, AVAILABILITY OR NON-INFRINGEMENT, TO THE EXTENT
+ PERMITTED BY LAW. AI-PRODUCED ANSWERS MAY BE WRONG: VERIFY THEM BEFORE USE.
+
+10. Limitation of liability. TO THE EXTENT PERMITTED BY LAW, IMPERIAL AND ITS
+ CONTRIBUTORS ARE NOT LIABLE FOR ANY DIRECT OR INDIRECT DAMAGES, LOSS OF DATA OR
+ PROFITS, INTERRUPTION, SECURITY BREACHES OR OTHER DAMAGES ARISING FROM THE USE
+ OR INABILITY TO USE THE SOFTWARE, EVEN IF ADVISED OF THEIR POSSIBILITY.
+ NOTHING HEREIN EXCLUDES LIABILITY THAT CANNOT BE EXCLUDED BY LAW.
+
+11. Your responsibility. You alone are responsible for complying with the laws
+ applicable to Your use (personal data protection, copyright, export control,
+ security rules, terms of AI providers and GitHub). You must protect secrets
+ (API keys, tokens, passwords) and Your users' accounts.
+
+12. Term and termination. The license lasts as long as You comply. On breach,
+ it terminates automatically; it is reinstated (a) provisionally once You stop
+ all breach, and (b) permanently if Imperial does not notify You within 60
+ days after cessation. If Imperial notifies You of a breach for the first time,
+ the license is permanently reinstated if You cure it within 30 days of
+ notice. Termination does not affect those who received the Software from You
+ as long as they comply; they receive their license directly from Imperial.
+ A breach of Articles 3, 4 or 5 may also lead to enforcement (removal,
+ publication of Source, cessation) and the remedies provided by law.
+
+13. Distribution, sublicensing and versions. Each recipient receives a license
+ directly from Imperial. You may not sublicense on different terms. Imperial
+ may publish new versions of this license; a work received under version 1.0
+ remains usable under version 1.0. You may Convey the Software under this
+ license only: dual licensing, relicensing and paid licensing are forbidden.
+
+14. Interpretation and governing law. If a clause is invalid or unenforceable,
+ it is applied as far as possible and the others remain in force. A waiver is
+ valid only in writing. Headings are indicative; "including" means "including
+ without limitation". This license is the entire agreement about the Software.
+ It is governed by French law, subject to mandatory rules of the recipient's
+ country; competent courts are those designated by French ordinary law unless
+ mandatory rules provide otherwise. Imperial has no duty to provide support,
+ fixes or updates.
+
+15. Notice to reproduce. "Based on Imperial CodeCenter, created by Imperial —
+ https://imperial-corporation.pages.dev/icc — Imperial Community License 1.0"

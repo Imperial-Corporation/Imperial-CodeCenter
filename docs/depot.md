@@ -1,20 +1,10 @@
-# Ajouter des scripts facilement
+# Ajouter des scripts (zone de dépôt du serveur)
 
-![Réponse](images/reponse-markdown.png)
+Depuis la 1.0.1, l'interface web n'a plus de section « Ajouter des scripts » : les scripts s'ajoutent côté serveur.
 
-## Par l'interface
+## Zone de dépôt
 
-Section **Ajouter des scripts** : dépose des fichiers (ou une archive `.zip`), écris des **tags** sous la zone (`tag1, tag2`), valide. Aperçu du rangement en direct : `tag1 / tag2 / <langage>`.
-
-- Les fichiers sont rangés dans `<dossier surveillé>/tag1/tag2/<langage>/fichier`.
-- **Sans tag** : classement automatique par contenu (catégorie `importes` par défaut).
-- Options : classement automatique, conserver l'arborescence des ZIP.
-- Limites : 1 Mo par fichier, 50 Mo par envoi, nombre de fichiers plafonné (`CODECENTER_IMPORT_*`), extensions de code reconnues seulement (les autres sont signalées « ignorées »).
-- ZIP : chemins dangereux (`../`), liens symboliques et archives piégées rejetés.
-
-## Par la zone de dépôt (copie directe sur le serveur)
-
-Le dossier `<dossier surveillé>/_depot/` est examiné toutes les 15 s (`CODECENTER_DEPOT_SECS`) ou à la demande (bouton « Ranger maintenant »).
+Copie tes fichiers dans `<dossier surveillé>/_depot/` : ils sont examinés toutes les 15 s (`CODECENTER_DEPOT_SECS`), rangés dans `<dossier surveillé>/tag1/tag2/<langage>/fichier`, puis indexés.
 
 Pour étiqueter, au choix :
 
@@ -22,8 +12,10 @@ Pour étiqueter, au choix :
 2. un fichier `monscript.py.tags` à côté du script ;
 3. des sous-dossiers : `_depot/reseau/ping.py` reçoit le tag `reseau`.
 
-Un registre (`depot-ledger.json`) évite de ranger deux fois le même fichier ; un fichier encore en cours de copie est attendu. Les écritures sont atomiques.
+Sans tag, classement automatique par contenu. Un registre (`depot-ledger.json`) évite de ranger deux fois le même fichier ; un fichier en cours de copie est attendu ; les écritures sont atomiques. Un import est refusé sous `CODECENTER_MIN_FREE_GB` d'espace libre.
 
-## Disque
+## Routes d'administration (toujours disponibles)
 
-Un import est refusé sous `CODECENTER_MIN_FREE_GB` (2 Go) d'espace libre.
+Pour les scripts et outils : `POST /api/v1/library/import` (multipart `files`, `tags`, `auto_classify`, `keep_folders`), `POST /api/v1/library/depot/scan`, `GET /api/v1/library/info` — avec `CODECENTER_ADMIN_TOKEN` si défini ([api.md](api.md)). Limites : 1 Mo par fichier, 50 Mo par envoi (`CODECENTER_IMPORT_*`) ; ZIP : chemins dangereux, liens symboliques et archives piégées rejetés.
+
+Le crawler GitHub ([crawler.md](crawler.md)) alimente la bibliothèque automatiquement.

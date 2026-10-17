@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Routes FastAPI : configuration sans fuite de secret, recherche, erreurs."""
 
 import asyncio
@@ -42,7 +45,8 @@ SAVE = {"base_url": "https://api.openai.com/v1", "model": "gpt-4o-mini", "api_ke
 
 def test_catalogue_complet_sans_secret(client):
     data = client.get("/api/v1/ai/catalog").json()
-    assert [p["id"] for p in data["providers"]] == ["ollama", "omniroute", "claude", "openai", "groq", "gemini"]
+    assert [p["id"] for p in data["providers"]][:6] == ["ollama", "omniroute", "claude", "openai", "groq", "gemini"]
+    assert len(data["providers"]) == 18
     assert all(p["glyph"] and p["accent"] for p in data["providers"])
     assert {f["key"] for f in data["advanced_fields"]} >= {"timeout_s", "context_window", "max_tool_calls"}
 

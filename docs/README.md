@@ -1,10 +1,12 @@
-# Documentation d'Imperial CodeCenter — v1.0.0
+# Documentation d'Imperial CodeCenter — v1.0.1
 
 | Document | Contenu |
 |---|---|
 | [installation.md](installation.md) | Installer, mettre à jour, désinstaller, diagnostiquer (`install.sh`, `doctor.sh`) |
 | [permissions.md](permissions.md) | Pourquoi « Permission denied (os error 13) » arrivait, et comment c'est réglé |
-| [depot.md](depot.md) | Ajouter des scripts facilement : interface, zone de dépôt, tags, ZIP |
+| [comptes.md](comptes.md) | Comptes (pseudo + mot de passe), barre latérale, discussions enregistrées |
+| [depot.md](depot.md) | Ajouter des scripts côté serveur : zone de dépôt, tags, routes d'administration |
+| [licence.md](licence.md) | Imperial Community License 1.0 : ce qui est permis, obligatoire, interdit |
 | [crawler.md](crawler.md) | Collecte GitHub : planification, objectifs d'arrêt, sécurité disque |
 | [proxy.md](proxy.md) | Production derrière Nginx et/ou Cloudflare (activable à la demande) |
 | [ia.md](ia.md) | Fournisseurs IA, OmniRoute, profondeur des recherches, chatbox, Markdown |

@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Orchestration d'une recherche assistée par IA.
 
 Flux : recherche dans l'index (Rust) → lecture des meilleurs fichiers →
@@ -20,7 +23,7 @@ from typing import Sequence
 from .compression import CompressionResult, DocInput, compress_documents, estimate_tokens
 from .config.store import ConfigStore, ProviderRuntime
 from .conversation import ConversationRepository, SearchRun, new_id
-from .depth import Depth, assess
+from .depth import Depth, assess, select_relevant
 from .engine_gateway import EngineGateway
 from .errors import EngineError, ProviderError, ToolsUnsupportedError
 from .providers.base import ChatProvider, Message
@@ -57,6 +60,7 @@ Règles :
 - Un bloc marqué EXTRAIT PARTIEL, PLAN ou RÉFÉRENCE n'est pas le fichier intégral : utilise read_file pour lire le code manquant avant d'affirmer quoi que ce soit à son sujet.
 - Pour montrer du code d'une source, recopie-le fidèlement et indique ses source_ids. Du code que tu écris toi-même n'a pas de source_ids.
 - Réponds dans la langue de la question.
+- Sois sobre : n'utilise un outil que si les sources jointes ne suffisent pas, ne cite que les sources réellement utiles (used_sources) et ne recopie que le code nécessaire.
 - Commence par répondre à ce qui est demandé, simplement. N'ajoute pas de sujets annexes non demandés (sécurité, chiffrement, authentification, déploiement…) : propose-les plutôt dans `follow_ups`.
 - Les textes (summary, body) acceptent un Markdown simple : **gras**, *italique*, listes, `code inline`, sous-titres ###, tableaux. Pas de HTML. Le code multi-lignes va uniquement dans `code_blocks`.
 
@@ -157,7 +161,7 @@ class SearchService:
         # 1. Recherche dans l'index.
         limit = min(params.limit, level.search_limit) if level.search_limit else params.limit
         found = await self._engine.search(params.query, limit, params.language, params.category)
-        hits = found.get("results") or []
+        hits, attach_ids = select_relevant(found.get("results") or [], level)
         for hit in hits:
             registry.register_hit(hit)
         if found.get("truncated"):
@@ -199,7 +203,7 @@ class SearchService:
         # 2-3. Lecture et compression au budget du modèle.
         context_budget, limits, available = compute_budgets(runtime, tools_enabled)
         terms = list(found.get("terms") or [])
-        docs = await self._load_documents(registry, warnings, level.max_attached)
+        docs = await self._load_documents(registry, warnings, level.max_attached, attach_ids)
         compression = compress_documents(docs, terms, context_budget)
         _seen_from_blocks(registry, docs, compression)
         warnings.extend(compression.warnings)
@@ -265,10 +269,17 @@ class SearchService:
         return response
 
     async def _load_documents(
-        self, registry: SourceRegistry, warnings: list[str], max_files: int = MAX_ATTACHED_FILES
+        self, registry: SourceRegistry, warnings: list[str], max_files: int = MAX_ATTACHED_FILES,
+        only_documents: set[str] | None = None,
     ) -> list[DocInput]:
-        """Lit le contenu des meilleurs fichiers pas encore joints (en parallèle, borné)."""
-        sources = [s for s in registry.all() if not s.attached][:max_files]
+        """Lit le contenu des fichiers utiles pas encore joints (en parallèle, borné).
+
+        `only_documents` limite aux documents jugés assez pertinents ce tour-ci.
+        """
+        sources = [
+            s for s in registry.all()
+            if not s.attached and (only_documents is None or s.document_id in only_documents)
+        ][:max_files]
         for source in sources:
             source.attached = True
         gate = asyncio.Semaphore(4)

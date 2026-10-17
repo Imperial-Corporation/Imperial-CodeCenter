@@ -14,6 +14,8 @@ Désactivé par défaut. À activer pour une exposition publique.
 
 `enable` génère la configuration nginx, la **teste (`nginx -t`) avant de l'activer** (retour arrière en cas d'erreur) et écrit `CODECENTER_PROXY_MODE` & co. dans `/etc/<service>/.env`, puis redémarre le service. `disable` revient au mode direct.
 
+Avec `--mode cloudflare`, **cloudflared** est installé automatiquement s'il manque (dépôt apt officiel `pkg.cloudflare.com`, sinon binaire des versions GitHub). `--tunnel-token JETON` installe aussi le service du tunnel Cloudflare ; `--no-cloudflared` saute cette installation. Le jeton est celui du tunnel créé dans le tableau de bord Cloudflare Zero Trust.
+
 ## Ce que fait chaque mode
 
 | | `nginx` | `cloudflare` |
@@ -28,4 +30,4 @@ Plages Cloudflare : `config/proxy/cloudflare-ips.txt` (22 réseaux, vérifiées 
 
 ## Vérification
 
-La configuration produite a été validée avec `nginx -t` (nginx 1.24) pour les 4 variantes, **IPv6 désactivé** (le bac à sable de test n'avait pas d'IPv6 ; sur ton serveur, laisse l'IPv6 activé si disponible). Aucun test n'a été fait avec un vrai domaine Cloudflare.
+La configuration produite a été validée avec `nginx -t` (nginx 1.24) pour les 4 variantes, **IPv6 désactivé** (le bac à sable de test n'avait pas d'IPv6 ; sur ton serveur, laisse l'IPv6 activé si disponible). Aucun test n'a été fait avec un vrai domaine Cloudflare, et l'installation de cloudflared n'a pas pu être testée en ligne dans le bac à sable (commandes écrites d'après la documentation officielle).

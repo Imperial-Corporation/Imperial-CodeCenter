@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Chiffrement des secrets au repos (Fernet : AES-128-CBC + HMAC-SHA256).
 
 La clé maître n'est jamais stockée avec les données chiffrées. Ordre de

@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 # Active ou désactive l'intégration nginx / Cloudflare (production).
 #
 #   ./scripts/setup_proxy.sh enable --mode cloudflare --server-name code.exemple.fr
@@ -16,6 +19,9 @@
 #   --no-lock                 mode cloudflare : ne pas restreindre l'origine aux IP Cloudflare
 #   --no-ipv6                 serveur sans IPv6
 #   --max-upload-mb N         taille maximale d'un envoi (défaut 60)
+#   --no-cloudflared          mode cloudflare : n'installe pas cloudflared
+#   --tunnel-token JETON      mode cloudflare : installe cloudflared ET le service du tunnel
+#                             (jeton fourni par Cloudflare Zero Trust > Tunnels ; non conservé)
 #
 # `enable` : génère la configuration nginx, la teste (`nginx -t`) AVANT de l'activer
 # (retour arrière automatique si elle échoue), règle le service (CODECENTER_PROXY_MODE…)
@@ -36,7 +42,7 @@ die() { echo "Erreur : $*" >&2; exit 1; }
 SUDO=""; ((EUID == 0)) || SUDO="sudo"
 
 ACTION="${1:-}"; shift || true
-MODE=""; SERVER_NAME=""; TLS_CERT=""; TLS_KEY=""; EXTRA=()
+MODE=""; SERVER_NAME=""; TLS_CERT=""; TLS_KEY=""; EXTRA=(); WANT_CLOUDFLARED=1; TUNNEL_TOKEN=""
 while (($#)); do
     case "$1" in
         --mode) MODE="${2:?}"; shift 2 ;;
@@ -45,10 +51,15 @@ while (($#)); do
         --tls-key) TLS_KEY="${2:?}"; shift 2 ;;
         --max-upload-mb) EXTRA+=(--max-upload-mb "${2:?}"); shift 2 ;;
         --no-lock|--no-ipv6) EXTRA+=("$1"); shift ;;
-        -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        --no-cloudflared) WANT_CLOUDFLARED=0; shift ;;
+        --tunnel-token) TUNNEL_TOKEN="${2:?}"; shift 2 ;;
+        -h|--help) awk 'NR>=5 && /^#/ {print; next} NR>5 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) die "Option inconnue : $1" ;;
     esac
 done
+
+# shellcheck source=/dev/null
+source "$ROOT/scripts/lib/toolchain.sh"
 
 PYTHON="python3"
 [[ -x "$INSTALL_DIR/api/.venv/bin/python" ]] && PYTHON="$INSTALL_DIR/api/.venv/bin/python"
@@ -95,6 +106,12 @@ enable)
     command -v nginx >/dev/null 2>&1 || die "nginx n'est pas installé (sudo apt install nginx)."
     [[ -f "$ENV_DEST" ]] || die "$ENV_DEST introuvable : lance d'abord release.sh."
 
+    # Cloudflare utilisé : cloudflared (tunnel) est installé automatiquement.
+    if [[ "$MODE" == "cloudflare" ]] && ((WANT_CLOUDFLARED)); then
+        ensure_cloudflared
+        [[ -n "$TUNNEL_TOKEN" ]] && install_cloudflared_service "$TUNNEL_TOKEN"
+    fi
+
     TMP="$(mktemp)"; trap 'rm -f "$TMP"' EXIT
     render > "$TMP"
 
@@ -119,7 +136,14 @@ enable)
     echo "Proxy activé (mode $MODE) pour $SERVER_NAME."
     echo "Vérification : curl -s http://127.0.0.1:${API_PORT}/api/v1/proxy/check   (accès direct)"
     echo "               curl -s https://$SERVER_NAME/api/v1/proxy/check            (via le proxy)"
-    [[ "$MODE" == "cloudflare" ]] && echo "Cloudflare : proxy orange activé, SSL/TLS en 'Full (strict)' si tu as un certificat sur nginx." ;;
+    if [[ "$MODE" == "cloudflare" ]]; then
+        echo "Cloudflare : proxy orange activé, SSL/TLS en 'Full (strict)' si tu as un certificat sur nginx."
+        if [[ -n "$TUNNEL_TOKEN" ]]; then
+            echo "Tunnel : dans Cloudflare Zero Trust, fais pointer le nom public vers http://localhost:80 (nginx)."
+        elif ((WANT_CLOUDFLARED)); then
+            echo "cloudflared est installé. Pour un tunnel : ./scripts/setup_proxy.sh enable --mode cloudflare --server-name $SERVER_NAME --tunnel-token <jeton>"
+        fi
+    fi ;;
 
 disable)
     set_env CODECENTER_PROXY_MODE -
@@ -144,5 +168,5 @@ status)
         echo
     fi ;;
 
-*) sed -n '2,24p' "${BASH_SOURCE[0]}"; exit 2 ;;
+*) awk 'NR>=5 && /^#/ {print; next} NR>5 {exit}' "${BASH_SOURCE[0]}"; exit 2 ;;
 esac

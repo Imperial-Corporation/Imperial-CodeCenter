@@ -1,9 +1,30 @@
-# Référence de l'API (v1.0.0)
+# Référence de l'API (v1.0.1)
 
 Documentation interactive : `/docs`. Erreurs : `{"detail": "...", "code": "..."}`.
 
 ## Système
 `GET /api/health` · `GET /api/v1/status` · `GET /api/v1/stats` · `GET /api/v1/proxy/check` · `WS /ws/status`
+
+## Identité du projet
+`GET /api/v1/about` (nom, version, organisation, site, licence, crédits) · `GET /LICENSE` · `GET /NOTICE`
+
+## Comptes et discussions enregistrées
+Cookie de session `icc_session` (HttpOnly) ; refus inter-sites (en-tête `Origin`).
+
+| Route | Corps | Rôle |
+|---|---|---|
+| `GET /api/v1/auth/me` | — | `{enabled, registration_open, user}` |
+| `POST /api/v1/auth/register` · `/auth/login` | `{username, password}` | crée / ouvre la session ; 429 après trop d'échecs |
+| `POST /api/v1/auth/logout` | — | ferme la session |
+| `POST /api/v1/auth/password` | `{current, new}` | change le mot de passe |
+| `POST /api/v1/auth/delete` | `{password}` | supprime le compte et ses discussions |
+| `GET /api/v1/chats` | — | liste des discussions enregistrées |
+| `POST /api/v1/chats` | `{conversation_id, title?}` | rend la discussion en cours définitive |
+| `POST /api/v1/chats/{id}/open` | — | rouvre : `{id, title, conversation_id, turns}` |
+| `PATCH /api/v1/chats/{id}` | `{title}` | renomme |
+| `DELETE /api/v1/chats/{id}` | — | supprime |
+
+Une discussion enregistrée reçoit automatiquement les tours suivants de `/chat`. Voir [comptes.md](comptes.md).
 
 ## Recherche et chat
 | Route | Corps | Résultat |

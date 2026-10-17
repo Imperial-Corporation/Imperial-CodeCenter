@@ -1,3 +1,6 @@
+// Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+// Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 //! Fonctions pures de recherche textuelle : découpage de la requête,
 //! scoring et extraction d'extraits. Aucune dépendance base de données
 //! ni disque, ce qui les rend entièrement testables.

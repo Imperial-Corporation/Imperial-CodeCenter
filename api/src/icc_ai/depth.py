@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Profondeur de recherche : répondre simplement d'abord, approfondir ensuite.
 
 Une question générale (« comment faire une API en Python ? ») mérite une
@@ -65,6 +68,8 @@ class Depth:
     search_limit: int | None  # plafond du nombre de résultats d'index
     max_attached: int  # fichiers joints d'emblée au contexte
     tool_cap: int | None  # plafond d'appels d'outils (None = réglage du fournisseur)
+    keep_ratio: float = 0.25  # un résultat n'est gardé que s'il vaut ce part du meilleur score
+    attach_ratio: float = 0.45  # et n'est joint au contexte que s'il en vaut cette part
 
     @property
     def guidance(self) -> str:
@@ -72,10 +77,36 @@ class Depth:
 
 
 _LEVELS = {
-    "overview": Depth("overview", search_limit=6, max_attached=3, tool_cap=2),
-    "focused": Depth("focused", search_limit=None, max_attached=6, tool_cap=None),
-    "deep": Depth("deep", search_limit=None, max_attached=8, tool_cap=None),
+    "overview": Depth("overview", search_limit=6, max_attached=2, tool_cap=2, keep_ratio=0.35, attach_ratio=0.6),
+    "focused": Depth("focused", search_limit=None, max_attached=5, tool_cap=None, keep_ratio=0.25, attach_ratio=0.45),
+    "deep": Depth("deep", search_limit=None, max_attached=8, tool_cap=None, keep_ratio=0.15, attach_ratio=0.3),
 }
+
+
+def select_relevant(hits: Sequence[dict], level: "Depth") -> tuple[list[dict], set[str]]:
+    """Ne garde que les résultats réellement utiles.
+
+    Retourne (résultats gardés, identifiants de documents à joindre au
+    contexte). Le meilleur résultat est toujours gardé et joint ; les autres
+    doivent atteindre une part de son score (voir `keep_ratio`/`attach_ratio`).
+    Un fichier peu pertinent n'est ni montré ni envoyé au modèle : moins de
+    bruit, moins de tokens, réponses plus justes.
+    """
+    scored = [(float(h.get("score") or 0.0), h) for h in hits]
+    if not scored:
+        return [], set()
+    top = max(score for score, _ in scored)
+    if top <= 0:
+        kept = [h for _, h in scored[:1]]
+        return kept, {str(h["document_id"]) for h in kept}
+    kept, attach = [], set()
+    for score, hit in scored:
+        ratio = score / top
+        if ratio >= level.keep_ratio or not kept:
+            kept.append(hit)
+            if ratio >= level.attach_ratio or len(attach) == 0:
+                attach.add(str(hit["document_id"]))
+    return kept, attach
 
 
 def _normalize(text: str) -> str:

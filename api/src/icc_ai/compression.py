@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Compression sémantique des fichiers de code joints au contexte.
 
 Le principe n'est pas de tronquer : chaque fichier est analysé (imports,

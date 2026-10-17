@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Interface commune des connecteurs et types de messages neutres.
 
 Chaque connecteur traduit ces types vers le protocole de son fournisseur :

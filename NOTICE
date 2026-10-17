@@ -1,0 +1,30 @@
+Imperial CodeCenter
+Copyright (c) Imperial
+
+Basé sur Imperial CodeCenter, créé par Imperial
+Based on Imperial CodeCenter, created by Imperial
+
+  Organisation d'origine : Imperial
+  Site officiel / projet d'origine : https://imperial-corporation.pages.dev/icc
+  Licence : Imperial Community License 1.0 (fichier LICENSE)
+
+Crédits
+  Développeur en chef : yolezz
+  Organisation        : Imperial
+  Idée originale      : HyperDemoned
+
+Cette mention (ce fichier, le texte de la licence et l'indication d'origine) doit
+être conservée dans toute copie, tout fork et tout programme qui utilise le
+Logiciel, et rester visible dans le README, la documentation et l'interface
+(article 3 de la licence). Les œuvres dérivées doivent indiquer qu'elles ont été
+modifiées, par qui, et rester entièrement publiques, gratuites et sous la même
+licence (articles 4 et 5).
+
+Composants tiers
+  Le projet utilise des bibliothèques tierces (Python : FastAPI, httpx,
+  cryptography, uvicorn… ; Rust : pyo3, tokio, sqlx… ; voir api/pyproject.toml,
+  api/uv.lock, engine/Cargo.toml, engine/Cargo.lock). Elles restent soumises à
+  leurs propres licences. Le collecteur GitHub ne récupère que des fichiers sous
+  licence permissive ; ces fichiers restent soumis à leur licence d'origine et à
+  la mention de leurs auteurs (voir le manifeste de provenance du collecteur).
+  Les 35 scripts de examples/ font partie du Logiciel et suivent la licence.

@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Catalogue des fournisseurs pris en charge et réglages avancés.
 
 Le catalogue est la source de vérité unique : le frontend l'interroge
@@ -97,6 +100,71 @@ PROVIDERS: dict[str, ProviderSpec] = {
             "https://generativelanguage.googleapis.com/v1beta", "gemini-2.5-flash",
             "#60a5fa", "Ge",
             default_context_window=1_000_000,
+        ),
+        ProviderSpec(
+            "openrouter", "OpenRouter", "remote", "openai", True,
+            "https://openrouter.ai/api/v1", "anthropic/claude-sonnet-4.5", "#818cf8", "Or",
+            default_context_window=128000,
+            notes="Passerelle vers des centaines de modèles. Le nom du modèle est de la forme « éditeur/modèle ».",
+        ),
+        ProviderSpec(
+            "mistral", "Mistral", "remote", "openai", True,
+            "https://api.mistral.ai/v1", "mistral-large-latest", "#fbbf24", "Mi",
+            default_context_window=128000,
+        ),
+        ProviderSpec(
+            "deepseek", "DeepSeek", "remote", "openai", True,
+            "https://api.deepseek.com/v1", "deepseek-chat", "#38bdf8", "Ds",
+            default_context_window=64000,
+        ),
+        ProviderSpec(
+            "xai", "xAI", "remote", "openai", True,
+            "https://api.x.ai/v1", "grok-4", "#e5e7eb", "xA",
+            default_context_window=128000,
+        ),
+        ProviderSpec(
+            "together", "Together AI", "remote", "openai", True,
+            "https://api.together.xyz/v1", "meta-llama/Llama-3.3-70B-Instruct-Turbo", "#f87171", "To",
+            default_context_window=128000,
+        ),
+        ProviderSpec(
+            "fireworks", "Fireworks AI", "remote", "openai", True,
+            "https://api.fireworks.ai/inference/v1", "accounts/fireworks/models/llama-v3p3-70b-instruct",
+            "#fb7185", "Fw",
+            default_context_window=128000,
+        ),
+        ProviderSpec(
+            "cerebras", "Cerebras", "remote", "openai", True,
+            "https://api.cerebras.ai/v1", "llama-3.3-70b", "#a3e635", "Ce",
+            default_context_window=64000,
+        ),
+        ProviderSpec(
+            "nvidia", "NVIDIA NIM", "remote", "openai", True,
+            "https://integrate.api.nvidia.com/v1", "meta/llama-3.3-70b-instruct", "#84cc16", "Nv",
+            default_context_window=128000,
+        ),
+        ProviderSpec(
+            "cohere", "Cohere", "remote", "openai", True,
+            "https://api.cohere.ai/compatibility/v1", "command-r-plus", "#2dd4bf", "Co",
+            default_context_window=128000,
+            notes="API de compatibilité OpenAI de Cohere.",
+        ),
+        ProviderSpec(
+            "lmstudio", "LM Studio", "local", "openai", False,
+            "http://127.0.0.1:1234/v1", "", "#c084fc", "LM",
+            default_context_window=8192,
+            notes="Serveur local de LM Studio. Charge un modèle, puis démarre le serveur.",
+        ),
+        ProviderSpec(
+            "llamacpp", "llama.cpp / vLLM", "local", "openai", False,
+            "http://127.0.0.1:8080/v1", "", "#fcd34d", "Ll",
+            default_context_window=8192,
+            notes="Serveur compatible OpenAI (llama-server, vLLM, LocalAI…). Clé API facultative.",
+        ),
+        ProviderSpec(
+            "custom", "Compatible OpenAI (autre)", "remote", "openai", False,
+            "https://", "", "#94a3b8", "Cx",
+            notes="Tout service compatible OpenAI : renseigne son URL, son modèle et, si besoin, sa clé.",
         ),
     )
 }

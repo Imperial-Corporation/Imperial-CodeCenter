@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Modèles de données préparant une future chatbox.
 
 Rien de tout cela n'est branché à l'interface aujourd'hui : ces classes

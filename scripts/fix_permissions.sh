@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 # Rend le dossier surveillé utilisable à la fois par le service ET par toi,
 # sans chown/chmod généralisés et sans toucher aux propriétaires des fichiers.
 #
@@ -29,7 +32,7 @@ while (($#)); do
     case "$1" in
         --user) ADMIN_USER="${2:?--user attend un nom}"; shift 2 ;;
         --dry-run) DRY=1; shift ;;
-        -h|--help) sed -n '2,22p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) awk 'NR>=5 && /^#/ {print; next} NR>5 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
         -*) echo "Option inconnue : $1" >&2; exit 2 ;;
         *) if [[ -z "$TARGET" ]]; then TARGET="$1"; elif [[ -z "$SERVICE" ]]; then SERVICE="$1"; fi; shift ;;
     esac

@@ -1,3 +1,6 @@
+// Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+// Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 "use strict";
 
 /*
@@ -105,7 +108,10 @@
         head.append(el("span", "ai-code-lang", language || "texte"), copyButton(() => code));
         const pre = el("pre");
         pre.tabIndex = 0;
-        pre.append(el("code", "", code));
+        const codeNode = el("code");
+        if (ICC.highlight) codeNode.append(ICC.highlight.render(code, language));
+        else codeNode.textContent = code;
+        pre.append(codeNode);
         figure.append(head, pre);
         return figure;
     }

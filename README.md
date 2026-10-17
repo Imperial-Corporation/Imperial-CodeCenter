@@ -1,10 +1,14 @@
 # Imperial CodeCenter
 
-**Version 1.0.0** — Moteur de recherche de code et de documentation, assisté par IA.
+**Version 1.0.1** — Moteur de recherche de code et de documentation, assisté par IA.
 
 Développeur en chef : **yolezz** · Organisation : **Imperial** · Idée originale : **HyperDemoned**
 
+Basé sur **Imperial CodeCenter**, créé par **Imperial** — <https://imperial-corporation.pages.dev/icc> · Licence : [Imperial Community License 1.0](LICENSE) (libre et gratuite, code ouvert obligatoire, usage payant interdit).
+
 Documentation détaillée : [`docs/`](docs/README.md).
+
+![Accueil](docs/images/accueil.png)
 
 Les fichiers déposés dans les dossiers surveillés sont indexés automatiquement. Une question en langage naturel retrouve les fichiers pertinents, les compresse au budget du modèle, puis un fournisseur IA (local ou distant) rédige une réponse structurée, avec des sources vérifiables.
 
@@ -13,7 +17,7 @@ Les fichiers déposés dans les dossiers surveillés sont indexés automatiqueme
 ```
 frontend/ (HTML/CSS/JS)  ──HTTP──▶  api/ (FastAPI + Python)  ──PyO3──▶  engine/ (Rust)  ──▶  PostgreSQL
                                          │                                  └─▶ fichiers (dossiers surveillés)
-                                         └──HTTP──▶ fournisseurs IA (Ollama, OmniRoute, Claude, OpenAI, Groq, Gemini)
+                                         └──HTTP──▶ fournisseurs IA (18 : Ollama, OmniRoute, Claude, OpenAI, Gemini, OpenRouter, Mistral…)
 ```
 
 | Dossier | Rôle |
@@ -21,7 +25,7 @@ frontend/ (HTML/CSS/JS)  ──HTTP──▶  api/ (FastAPI + Python)  ──PyO
 | `engine/` | Moteur Rust (module Python `codecenter_engine`) : watcher et indexation, recherche, lecture sécurisée, statistiques. |
 | `api/src/main.py` | Application FastAPI : frontend, santé, statistiques, WebSocket, routes IA. |
 | `api/src/icc_ai/` | Orchestration IA (voir ci-dessous). |
-| `frontend/` | Interface : recherche, fichiers, panneau de configuration IA, affichage des réponses. |
+| `frontend/` | Interface : accueil, discussion, barre latérale (comptes, discussions enregistrées), panneaux de configuration IA et crawler. |
 | `config/` | Migrations SQL, `.env`, service systemd, paramètres de déploiement. |
 | `crawler/` | Collecteur GitHub (`icc_crawler`) : licences permissives, planification, objectifs d'arrêt, sécurité disque. |
 | `examples/` | 35 scripts d'exemple installés au premier déploiement. |
@@ -47,7 +51,7 @@ Les erreurs Rust deviennent `ValueError` (entrée invalide), `LookupError` (intr
 |---|---|
 | `catalog.py` | Fournisseurs pris en charge, valeurs par défaut, réglages avancés (source unique de vérité, aussi lue par le frontend). |
 | `config/` | `ConfigStore` (fichier JSON persistant, permissions 0600), `SecretBox` (chiffrement Fernet), validation. |
-| `providers/` | Interface `ChatProvider` et un connecteur par protocole : `openai_compat` (OpenAI, Groq, OmniRoute), `anthropic`, `gemini`, `ollama`. |
+| `providers/` | Interface `ChatProvider` et un connecteur par protocole : `openai_compat` (OpenAI, Groq, OmniRoute, OpenRouter, Mistral, DeepSeek, xAI, Together, Fireworks, Cerebras, NVIDIA, Cohere, LM Studio, llama.cpp, libre), `anthropic`, `gemini`, `ollama`. |
 | `tools/` | Interface `Tool`, registre, outils `search_code`, `read_file`, `get_file_info`, `list_filters`. |
 | `compression.py` | Compression sémantique des fichiers au budget du modèle. |
 | `sources.py` | Registre des sources : identifiants `S1`, `S2`… attribués par le serveur. |
@@ -55,14 +59,16 @@ Les erreurs Rust deviennent `ValueError` (entrée invalide), `LookupError` (intr
 | `service.py` | Pipeline : recherche → lecture → compression → boucle modèle/outils → validation. |
 | `conversation.py` | Modèles de conversation. |
 | `chat.py`, `depth.py` | Chatbox en mémoire (outils disponibles) ; profondeur aperçu / ciblé / approfondi. |
-| `library.py`, `admin_api.py` | Import avec tags, ZIP, zone de dépôt ; routes d'administration. |
+| `library.py`, `admin_api.py` | Import avec tags, ZIP, zone de dépôt serveur ; routes d'administration. |
+| `accounts.py`, `accounts_api.py` | Comptes (scrypt, sessions par cookie), discussions enregistrées (SQLite). |
+| `about.py` | Identité du projet : version, organisation, licence, crédits. |
 | `crawl_jobs.py`, `crawler_bridge.py` | Pilotage du crawler (planification, arrêt, état). |
 | `proxy.py`, `proxy_config.py` | Intégration Nginx / Cloudflare et génération de la configuration. |
 | `api.py` | Routes FastAPI. |
 
 ## Installation et lancement
 
-Prérequis : Linux, PostgreSQL, Rust (`cargo`), [`uv`](https://docs.astral.sh/uv/), Python ≥ 3.10.
+Prérequis : Linux, PostgreSQL, [`uv`](https://docs.astral.sh/uv/), Python ≥ 3.10. Rust (`rustup`, `rustc`, `cargo`) est installé automatiquement s'il manque, et cloudflared aussi en mode Cloudflare.
 
 ### Développement
 
@@ -101,6 +107,7 @@ Les variables principales sont ci-dessous ; la liste complète (import, indexati
 | `CODECENTER_SECRET_KEY` | Clé Fernet de chiffrement des clés API (production). |
 | `CODECENTER_SECRET_KEY_FILE` | Alternative : chemin d'un fichier contenant la clé. |
 | `CODECENTER_KEY_DIR` | Développement seulement : dossier où une clé est générée si aucune n'est définie (par défaut `.local/`, ignoré par git). |
+| `CODECENTER_REGISTRATION` | `open` (défaut) ou `closed` : inscriptions de comptes. |
 | `CODECENTER_ADMIN_TOKEN` | Facultatif : si défini, la lecture et la modification de la configuration IA exigent `Authorization: Bearer <jeton>`. |
 
 Générer une clé : `python3 -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"`
@@ -109,7 +116,7 @@ Générer une clé : `python3 -c "import base64,os;print(base64.urlsafe_b64encod
 
 Le bouton à engrenage (en bas à droite) ouvre le panneau :
 
-- **Fournisseur** : Ollama, OmniRoute (locaux) ; Claude, OpenAI, Groq, Gemini (distants).
+- **Fournisseur** (18) : Ollama, OmniRoute, LM Studio, llama.cpp / vLLM (locaux) ; Claude, OpenAI, Groq, Gemini, OpenRouter, Mistral, DeepSeek, xAI, Together AI, Fireworks AI, Cerebras, NVIDIA NIM, Cohere (distants) ; « compatible OpenAI » pour toute autre URL `/v1`.
 - **URL, modèle, clé API** propres au fournisseur ; la clé enregistrée n'est jamais renvoyée au navigateur (le champ reste vide, laisser vide conserve la clé).
 - **Advanced features** : délai d'attente, tokens de sortie, fenêtre de contexte, température, nombre maximal d'appels d'outils.
 - **Tester la connexion** (liste aussi les modèles disponibles) et **Enregistrer et activer**.
@@ -118,13 +125,24 @@ La configuration est **globale à l'instance** : un seul fournisseur et un seul 
 
 Particularités gérées par les connecteurs : système séparé et blocs `tool_use`/`tool_result` (Claude) ; arguments d'outils en chaîne JSON, `max_completion_tokens` vs `max_tokens` (OpenAI-compatibles) ; schémas OpenAPI restreints, `functionCall` sans identifiant, clé en en-tête (Gemini) ; arguments objets, `num_ctx`, modèle sans outils (Ollama, repli automatique sans outils).
 
+## Nouveautés de la 1.0.1
+
+- **Interface** : dès qu'une question est posée, l'accueil s'efface pour laisser place à la discussion ; une réponse = une carte aux blocs séparés (synthèse, sections, code coloré, sources repliées, pistes, actions) ; la section « Ajouter des scripts » est supprimée.
+- **Comptes** : pseudo + mot de passe, cookie de session `HttpOnly`, barre latérale gauche qui se déplie au survol, **discussions définitives** (enregistrer, rouvrir, renommer, supprimer) ([docs/comptes.md](docs/comptes.md)).
+- **IA plus sobre** : seuls les fichiers réellement pertinents sont gardés et joints ; moins d'outils et de tokens ([docs/ia.md](docs/ia.md)).
+- **18 fournisseurs IA** (12 nouveaux).
+- **Installation automatique** de rustup / rustc / cargo et de cloudflared ([docs/installation.md](docs/installation.md), [docs/proxy.md](docs/proxy.md)).
+- **Licence** Imperial Community License 1.0, `NOTICE`, en-têtes de fichiers, `GET /api/v1/about` ([docs/licence.md](docs/licence.md)).
+
+![Discussion](docs/images/discussion.png)
+
 ## Nouveautés de la 1.0.0
 
-- **Ajout facile de scripts** : dépose des fichiers ou des ZIP dans l'interface (ou dans `_depot/` sur le serveur) avec des tags `tag1, tag2` : rangement automatique en `tag1/tag2/<langage>/` ([docs/depot.md](docs/depot.md)).
+- **Ajout facile de scripts** : zone de dépôt `_depot/` sur le serveur avec des tags : rangement automatique en `tag1/tag2/<langage>/` ([docs/depot.md](docs/depot.md)) ; l'envoi depuis l'interface a été retiré en 1.0.1.
 - **Permissions** : plus d'échec d'indexation sur un dossier non inscriptible (indexation sur place, nouvelles tentatives, rapport `/api/v1/index/health`, `fix_permissions.sh`, `doctor.sh`) ([docs/permissions.md](docs/permissions.md)).
 - **Crawler** : bouton globe à côté de l'engrenage ; démarrage planifié, arrêt à une heure / après *x* min / *x* Go / bibliothèque pleine, sécurité disque ([docs/crawler.md](docs/crawler.md)).
 - **Nginx / Cloudflare** : intégration activable (`setup_proxy.sh`) ([docs/proxy.md](docs/proxy.md)).
-- **IA** : réponses en Markdown, chatbox après la recherche (outils disponibles), pistes « Aller plus loin », profondeur adaptée à la question ([docs/ia.md](docs/ia.md)).
+- **IA** : réponses en Markdown, chatbox (outils disponibles), pistes « Aller plus loin », profondeur adaptée à la question ([docs/ia.md](docs/ia.md)).
 - Correctif OmniRoute (flux SSE / page HTML) ; 35 scripts d'exemple.
 
 ## Recherche assistée
@@ -169,19 +187,19 @@ Les identifiants inventés par le modèle sont retirés avec un avertissement. `
 
 ## Frontend
 
-`scripts/api.js` (services réseau), `answer-view.js` (affichage réutilisable d'une réponse, prévu pour chaque message d'une future chatbox), `settings-panel.js` (panneau), `app.js` (assemblage). Tout contenu est inséré avec `textContent` : le HTML produit par un modèle n'est jamais interprété.
+`api.js` (services réseau), `highlight.js` (coloration syntaxique), `markdown.js`, `answer-view.js` (carte de réponse), `conversation.js` (discussion), `auth.js` (compte), `sidebar.js` (barre latérale), `settings-panel.js` et `crawler-panel.js` (panneaux), `app.js` (assemblage). Tout contenu est inséré avec `textContent` : le HTML produit par un modèle n'est jamais interprété.
 
 ## Sécurité
 
 - Clés API chiffrées au repos (Fernet), clé maître séparée (`/etc/...`, root, 0600), `providers.json` en 0600 dans un dossier 0700 ; aucun secret dans les réponses HTTP, les logs ni les messages d'erreur.
-- Les routes de configuration refusent les requêtes inter-sites (en-tête `Origin`) ; `CODECENTER_ADMIN_TOKEN` ajoute une authentification. **L'application n'a pas de comptes utilisateurs** : sans ce jeton, toute personne qui atteint le serveur peut changer le fournisseur actif. Garde le service sur `127.0.0.1` derrière un reverse proxy authentifié, ou définis le jeton.
+- Les routes de configuration refusent les requêtes inter-sites (en-tête `Origin`) ; `CODECENTER_ADMIN_TOKEN` ajoute une authentification. Les comptes (facultatifs) protègent les discussions enregistrées mais **pas** ces routes d'administration : sans ce jeton, toute personne qui atteint le serveur peut changer le fournisseur actif. Garde le service sur `127.0.0.1` derrière un reverse proxy authentifié, ou définis le jeton.
 - L'URL d'un fournisseur est choisie par l'administrateur : elle est restreinte à `http(s)` sans identifiants, mais pas à une liste de machines (nécessaire pour Ollama/OmniRoute locaux).
 - Le contenu des fichiers est traité comme donnée dans le prompt (le modèle est averti d'ignorer d'éventuelles instructions) ; cela réduit le risque d'injection mais ne l'élimine pas.
 
 ## Tests
 
 ```bash
-cd api && uv sync && uv run pytest                  # 555 tests Python (4 d'intégration ignorés sans base)
+cd api && uv sync && uv run pytest                  # 614 tests Python (4 d'intégration ignorés sans base)
 cd engine && cargo test                              # 23 tests Rust
 ```
 
@@ -200,6 +218,13 @@ Les fournisseurs distants sont simulés avec `httpx.MockTransport` : aucun test 
 - L'analyse de code hors Python repose sur des motifs : approximative pour du code atypique (repli automatique).
 - Les noms de modèles par défaut sont des suggestions : saisis un modèle disponible sur ton compte (le test de connexion les liste).
 - Le tool-calling dépend du modèle ; sans support, la réponse se fonde sur les fichiers joints.
-- Les conversations du chat sont gardées **en mémoire** (2 h, 200 max) et perdues au redémarrage.
+- Les conversations non enregistrées sont gardées **en mémoire** (2 h, 200 max) et perdues au redémarrage ; les discussions enregistrées sont conservées dans le compte.
 - Le crawler a été testé avec des réponses GitHub simulées, pas contre le vrai GitHub ; la configuration nginx a été validée par `nginx -t` (IPv6 désactivé dans le bac à sable), pas avec un vrai domaine Cloudflare.
-- Pas de comptes utilisateurs : protège l'instance avec `CODECENTER_ADMIN_TOKEN` et/ou le proxy.
+- Les routes d'administration (configuration IA, crawler) ne dépendent pas des comptes : protège l'instance avec `CODECENTER_ADMIN_TOKEN` et/ou le proxy.
+- L'installation automatique de rustup et de cloudflared n'a pas pu être testée en ligne dans le bac à sable.
+
+## Licence et origine
+
+Imperial CodeCenter est distribué sous l'**Imperial Community License 1.0** ([LICENSE](LICENSE), [NOTICE](NOTICE), [résumé](docs/licence.md)) : utilisation et modification libres et gratuites ; tout programme qui l'utilise doit rester public et gratuit, sous la même licence ; l'usage dans un projet payant est interdit ; l'origine (**Imperial**, <https://imperial-corporation.pages.dev/icc>) doit rester visible. Ce n'est pas une licence reconnue par l'OSI et elle devrait être relue par un juriste avant tout usage à enjeu.
+
+Développeur en chef : **yolezz** · Organisation : **Imperial** · Idée originale : **HyperDemoned**

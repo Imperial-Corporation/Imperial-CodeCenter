@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Client minimal de l'API REST GitHub, poli envers les limites de débit.
 
 - jeton lu dans `GITHUB_TOKEN` (60 requêtes/h sans jeton, 5 000/h avec ;

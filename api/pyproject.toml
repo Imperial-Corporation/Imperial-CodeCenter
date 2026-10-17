@@ -1,7 +1,12 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 [project]
 name = "codecenter-api"
-version = "1.0.0"
+version = "1.0.1"
 requires-python = ">=3.10"
+license = { text = "LicenseRef-Imperial-Community-1.0" }
+authors = [{ name = "Imperial" }]
 dependencies = [
     "cryptography>=43",
     "fastapi>=0.115",
@@ -9,6 +14,9 @@ dependencies = [
     "python-multipart>=0.0.32",
     "uvicorn[standard]>=0.34",
 ]
+
+[project.urls]
+Homepage = "https://imperial-corporation.pages.dev/icc"
 
 [dependency-groups]
 dev = [

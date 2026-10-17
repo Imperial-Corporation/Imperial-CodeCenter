@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 # Déploie TOUT en une commande : préparation du serveur, compilation, base,
 # service systemd, scripts d'exemple, permissions, zone de dépôt, crawler,
 # proxy (optionnel) et diagnostic final.
@@ -15,6 +18,8 @@
 #   --force-examples         réinstalle les scripts d'exemple supprimés
 #   --generate-admin-token   crée CODECENTER_ADMIN_TOKEN s'il est absent (affiché une seule fois)
 #   --proxy MODE             nginx | cloudflare (voir docs/proxy.md)
+#   --tunnel-token JETON     avec --proxy cloudflare : installe aussi le service du tunnel cloudflared
+#   --no-cloudflared         avec --proxy cloudflare : n'installe pas cloudflared
 #   --server-name NOM        nom public (requis avec --proxy)
 #   --tls-cert / --tls-key   HTTPS sur nginx
 #   --no-doctor              saute le diagnostic final
@@ -30,7 +35,7 @@ step() { echo; echo "######## $* ########"; }
 [[ $EUID -ne 0 ]] || die "Lance ce script sans sudo (il demandera sudo quand il en a besoin)."
 
 SKIP_SYSTEM=0; FORCE_EX=0; GEN_TOKEN=0; DOCTOR=1
-PROXY=""; SERVER_NAME=""; TLS_CERT=""; TLS_KEY=""
+PROXY=""; SERVER_NAME=""; TLS_CERT=""; TLS_KEY=""; TUNNEL_TOKEN=""; NO_CLOUDFLARED=0
 while (($#)); do
     case "$1" in
         --skip-system) SKIP_SYSTEM=1; shift ;;
@@ -39,9 +44,11 @@ while (($#)); do
         --no-doctor) DOCTOR=0; shift ;;
         --proxy) PROXY="${2:?}"; shift 2 ;;
         --server-name) SERVER_NAME="${2:?}"; shift 2 ;;
+        --tunnel-token) TUNNEL_TOKEN="${2:?}"; shift 2 ;;
+        --no-cloudflared) NO_CLOUDFLARED=1; shift ;;
         --tls-cert) TLS_CERT="${2:?}"; shift 2 ;;
         --tls-key) TLS_KEY="${2:?}"; shift 2 ;;
-        -h|--help) sed -n '2,24p' "${BASH_SOURCE[0]}"; exit 0 ;;
+        -h|--help) awk 'NR>=5 && /^#/ {print; next} NR>5 {exit}' "${BASH_SOURCE[0]}"; exit 0 ;;
         *) die "Option inconnue : $1 (voir --help)" ;;
     esac
 done
@@ -94,6 +101,8 @@ fi
 if [[ -n "$PROXY" ]]; then
     ARGS=(enable --mode "$PROXY" --server-name "$SERVER_NAME")
     [[ -n "$TLS_CERT" ]] && ARGS+=(--tls-cert "$TLS_CERT" --tls-key "$TLS_KEY")
+    ((NO_CLOUDFLARED)) && ARGS+=(--no-cloudflared)
+    [[ -n "$TUNNEL_TOKEN" ]] && ARGS+=(--tunnel-token "$TUNNEL_TOKEN")
     "$ROOT/scripts/setup_proxy.sh" "${ARGS[@]}"
 else
     echo "Proxy non demandé (accès direct). Pour la production : --proxy nginx|cloudflare."

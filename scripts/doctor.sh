@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 # Diagnostic complet d'une installation : permissions, indexation, base, proxy.
 # Remplace l'audit manuel (ls, find -readable, journalctl…) par un seul rapport.
 #

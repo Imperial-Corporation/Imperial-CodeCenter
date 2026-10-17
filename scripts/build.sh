@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 set -Eeuo pipefail
 
 ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -25,8 +28,9 @@ else
     die "uv est introuvable. Lance d'abord ./scripts/deploy.sh."
 fi
 
-command -v cargo >/dev/null 2>&1 || die "cargo est introuvable."
-command -v rustc >/dev/null 2>&1 || die "rustc est introuvable."
+# shellcheck source=/dev/null
+source "$ROOT/scripts/lib/toolchain.sh"
+ensure_rust   # installe rustup, rustc et cargo s'ils manquent
 
 echo "=== Imperial CodeCenter : mode développement ==="
 

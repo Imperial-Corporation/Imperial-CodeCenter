@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Orchestration : recherche de dépôts → arborescence → téléchargement → rangement.
 
 Le crawler s'arrête proprement quand un budget est épuisé (heure, durée, volume,

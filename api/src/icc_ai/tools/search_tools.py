@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Outils reliés aux fonctions Rust existantes (`search`, `get_document`,
 `list_filters`). Aucun outil ne reçoit de chemin ni d'identifiant de base :
 seuls les identifiants de source du serveur (`S1`…) sont acceptés.

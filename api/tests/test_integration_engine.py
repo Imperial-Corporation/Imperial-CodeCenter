@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Intégration réelle : moteur Rust compilé + PostgreSQL + watcher.
 
 Ignoré par défaut. Pour l'exécuter :

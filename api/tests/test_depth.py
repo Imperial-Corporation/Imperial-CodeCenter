@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Choix de la profondeur : aperçu, ciblé, approfondi (forcé ou déduit)."""
 
 import pytest
@@ -11,8 +14,8 @@ def test_niveaux_et_plafonds():
     overview = assess("x", requested="overview")
     focused = assess("x", requested="focused")
     deep = assess("x", requested="deep")
-    assert (overview.level, overview.search_limit, overview.max_attached, overview.tool_cap) == ("overview", 6, 3, 2)
-    assert (focused.level, focused.search_limit, focused.max_attached, focused.tool_cap) == ("focused", None, 6, None)
+    assert (overview.level, overview.search_limit, overview.max_attached, overview.tool_cap) == ("overview", 6, 2, 2)
+    assert (focused.level, focused.search_limit, focused.max_attached, focused.tool_cap) == ("focused", None, 5, None)
     assert (deep.level, deep.search_limit, deep.max_attached, deep.tool_cap) == ("deep", None, 8, None)
 
 
@@ -120,3 +123,24 @@ def test_longue_question_precise_en_suite_de_conversation_devient_approfondie():
 def test_historique_vide_equivaut_a_premier_tour():
     assert assess("comment faire une API ?", ()).level == "overview"
     assert assess("comment faire une API ?", []).level == "overview"
+
+
+def test_selection_ne_garde_que_le_pertinent():
+    from icc_ai.depth import select_relevant
+    hits = [{"document_id": "a", "score": 10.0}, {"document_id": "b", "score": 5.0},
+            {"document_id": "c", "score": 3.0}, {"document_id": "d", "score": 0.5}]
+    ids = lambda kept: [h["document_id"] for h in kept]  # noqa: E731
+    kept, attach = select_relevant(hits, assess("x", requested="focused"))
+    assert ids(kept) == ["a", "b", "c"] and attach == {"a", "b"}  # d < 25 %, c < 45 % : pas joint
+    kept, attach = select_relevant(hits, assess("x", requested="overview"))
+    assert ids(kept) == ["a", "b"] and attach == {"a"}  # b = 50 % < 60 % : montré mais pas joint
+    kept, attach = select_relevant(hits, assess("x", requested="deep"))
+    assert ids(kept) == ["a", "b", "c"] and attach == {"a", "b", "c"}
+
+
+def test_selection_cas_limites():
+    from icc_ai.depth import select_relevant
+    level = assess("x", requested="focused")
+    assert select_relevant([], level) == ([], set())
+    kept, attach = select_relevant([{"document_id": "z", "score": 0.0}, {"document_id": "y", "score": 0.0}], level)
+    assert [h["document_id"] for h in kept] == ["z"] and attach == {"z"}

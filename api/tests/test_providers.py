@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Connecteurs : traduction des messages/outils, erreurs, secrets (httpx mockés)."""
 
 import json
@@ -284,3 +287,26 @@ def test_openai_compatible_sans_outils_leve_tools_unsupported():
     _, transport = capture({"error": {"message": "This model does not support tools"}}, status=400)
     with pytest.raises(ToolsUnsupportedError):
         run(create_provider(runtime("omniroute", "x", key=None), transport).chat(HISTORY, [TOOL]))
+
+
+@pytest.mark.parametrize("provider_id", ["openrouter", "mistral", "deepseek", "xai", "together", "fireworks",
+                                         "cerebras", "nvidia", "cohere", "lmstudio", "llamacpp", "custom"])
+def test_nouveaux_fournisseurs_compatibles_openai(provider_id):
+    """Chaque fournisseur ajouté parle le protocole OpenAI vers sa propre URL, avec la clé en Bearer."""
+    from icc_ai.catalog import PROVIDERS
+
+    spec = PROVIDERS[provider_id]
+    seen = {}
+
+    def handler(request):
+        seen["url"], seen["auth"] = str(request.url), request.headers.get("authorization")
+        return httpx.Response(200, json={"choices": [{"message": {"content": "ok"}, "finish_reason": "stop"}],
+                                         "usage": {"prompt_tokens": 1, "completion_tokens": 1}})
+
+    base = spec.default_base_url if provider_id != "custom" else "https://llm.example.org/v1"
+    rt = runtime(provider_id, "un-modele")
+    rt = type(rt)(provider_id, base, "un-modele", "cle-secrete" if spec.needs_api_key else None, rt.advanced)
+    out = run(create_provider(rt, httpx.MockTransport(handler)).chat(HISTORY, []))
+    assert out.text == "ok"
+    assert seen["url"].startswith(base.rstrip("/")) and seen["url"].endswith("/chat/completions")
+    assert seen["auth"] == ("Bearer cle-secrete" if spec.needs_api_key else None)

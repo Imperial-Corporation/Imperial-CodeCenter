@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 import asyncio
 import json
 import logging
@@ -11,6 +14,8 @@ from fastapi.staticfiles import StaticFiles
 
 from codecenter_engine import get_stats, healt, start_watcher, stop_watcher
 
+from icc_ai.about import ATTRIBUTION, LICENSE_NAME, VERSION, WEBSITE, about
+from icc_ai.accounts_api import router as accounts_router
 from icc_ai.admin_api import router as admin_router
 from icc_ai.api import router as ai_router
 from icc_ai.proxy import ProxyMiddleware, ProxySettings
@@ -97,8 +102,10 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Imperial CodeCenter",
-    version="1.0.0",
-    description="Moteur de recherche de code assisté par IA.",
+    version=VERSION,
+    description=f"Moteur de recherche de code assisté par IA. {ATTRIBUTION}.",
+    contact={"name": "Imperial", "url": WEBSITE},
+    license_info={"name": LICENSE_NAME, "url": WEBSITE},
     lifespan=lifespan,
 )
 
@@ -109,8 +116,26 @@ app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
 # IA : configuration des fournisseurs et recherche (/api/v1/search)
 # --------------------------------------------------
 
+@app.get("/LICENSE", include_in_schema=False)
+@app.get("/NOTICE", include_in_schema=False)
+def legal_text(request: Request):
+    """Texte de la licence et des mentions (à conserver avec le logiciel)."""
+    name = request.url.path.strip("/")
+    path = ROOT / name
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Fichier introuvable.")
+    return FileResponse(path, media_type="text/plain; charset=utf-8")
+
+
+@app.get("/api/v1/about", tags=["System"])
+async def about_route():
+    """Nom, version, origine (Imperial), licence et crédits."""
+    return about()
+
+
 app.include_router(ai_router)
 app.include_router(admin_router)
+app.include_router(accounts_router)
 
 # Proxy inverse (nginx / Cloudflare) : inactif sauf si CODECENTER_PROXY_MODE le demande.
 # Les en-têtes de sécurité sont envoyés dans tous les cas.

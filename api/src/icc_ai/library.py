@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Bibliothèque de code : import de fichiers avec tags et zone de dépôt.
 
 Deux façons d'ajouter des scripts sans jamais se heurter aux permissions :

@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Accès au paquet `icc_crawler`, livré à côté de l'API (dossier `crawler/`).
 
 Le crawler est un paquet autonome (il se lance aussi en ligne de commande).

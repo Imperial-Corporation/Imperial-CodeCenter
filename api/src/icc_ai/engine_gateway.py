@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Passerelle vers le moteur Rust (`codecenter_engine`).
 
 Python appelle directement les fonctions Rust exposées par PyO3 : aucun

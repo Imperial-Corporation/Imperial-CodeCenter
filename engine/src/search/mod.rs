@@ -1,3 +1,6 @@
+// Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+// Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 //! Recherche et lecture de documents indexés, exposées à Python.
 //!
 //! Le contenu des fichiers n'est pas stocké en base : PostgreSQL fournit

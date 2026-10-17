@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Routes FastAPI de l'IA : configuration des fournisseurs et recherche.
 
 FastAPI reste la seule interface entre le frontend et le backend. Les
@@ -53,13 +56,18 @@ def get_services(request: Request) -> AIServices:
 Services = Annotated[AIServices, Depends(get_services)]
 
 
-def require_admin(request: Request) -> None:
-    """Protège les routes qui modifient la configuration globale."""
+def check_origin(request: Request) -> None:
+    """Refuse une requête dont l'en-tête Origin n'est pas l'hôte (CSRF)."""
     origin = request.headers.get("origin")
     if origin:
         host = request.headers.get("host", "")
         if urlsplit(origin).netloc != host:
             raise HTTPException(403, "Requête inter-sites refusée.")
+
+
+def require_admin(request: Request) -> None:
+    """Protège les routes qui modifient la configuration globale."""
+    check_origin(request)
 
     token = os.environ.get("CODECENTER_ADMIN_TOKEN", "").strip()
     if token:
@@ -210,8 +218,28 @@ async def search(body: SearchRequest, request: Request, services: Services):
 async def chat_turn(body: ChatRequest, request: Request, services: Services):
     """Message suivant d'une conversation (les outils restent disponibles)."""
     chat = _chat(services)
-    return await _run_cancellable(
+    result = await _run_cancellable(
         request,
         lambda: chat.reply(body.conversation_id, body.message, depth=body.depth,
                            language=body.language, category=body.category),
     )
+    if isinstance(result, SearchResponse) and result.status == "ok":
+        _persist_turn(request, services, body.conversation_id, result)
+    return result
+
+
+def _persist_turn(request: Request, services: AIServices, conversation_id: str, response: SearchResponse) -> None:
+    """Ajoute le tour à la discussion enregistrée, si elle l'est et que son propriétaire est connecté."""
+    target = services.chat.saved_target(conversation_id) if services.chat else None
+    if target is None or services.accounts is None:
+        return
+    from .accounts_api import user_from_request  # import tardif : accounts_api dépend de ce module
+
+    user = user_from_request(request, services)
+    if user is None or user["id"] != target[1]:
+        return
+    try:
+        services.accounts.append_turn(user["id"], target[0], services.chat.snapshot(conversation_id)[-1])
+    except Exception as exc:  # la réponse reste valable même si l'enregistrement échoue
+        logger.warning("Enregistrement du tour impossible : %s", exc)
+        response.warnings.append("Ce message n'a pas pu être ajouté à la discussion enregistrée.")

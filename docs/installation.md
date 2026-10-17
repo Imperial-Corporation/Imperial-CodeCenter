@@ -1,6 +1,6 @@
 # Installation
 
-Prérequis : Linux (systemd), accès `sudo`, Python ≥ 3.10, Rust (`cargo`), [`uv`](https://docs.astral.sh/uv/), PostgreSQL.
+Prérequis : Linux (systemd), accès `sudo`, Python ≥ 3.10, [`uv`](https://docs.astral.sh/uv/), PostgreSQL. **Rust (`rustup`, `rustc`, `cargo`) est installé automatiquement** s'il manque (`scripts/lib/toolchain.sh`, appelé par `deploy.sh`, `build.sh` et `release.sh`), avec un compilateur C vérifié ; **cloudflared** l'est aussi quand le mode Cloudflare est demandé.
 
 ## Tout en une commande
 
@@ -19,6 +19,8 @@ Options :
 | `--generate-admin-token` | crée `CODECENTER_ADMIN_TOKEN` (affiché une seule fois) |
 | `--proxy nginx\|cloudflare --server-name NOM` | active l'intégration proxy ([proxy.md](proxy.md)) |
 | `--tls-cert` / `--tls-key` | HTTPS sur nginx |
+| `--tunnel-token JETON` | installe le service du tunnel Cloudflare (mode `cloudflare`) |
+| `--no-cloudflared` | n'installe pas cloudflared |
 | `--no-doctor` | saute le diagnostic |
 
 ## Développement

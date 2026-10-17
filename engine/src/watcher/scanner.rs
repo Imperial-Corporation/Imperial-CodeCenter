@@ -1,3 +1,6 @@
+// Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+// Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 use std::path::Path;
 
 use crate::indexing::document::{index_file_tracked, is_supported_file};

@@ -1,11 +1,20 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 [build-system]
 requires = ["maturin>=1.9,<2.0"]
 build-backend = "maturin"
 
 [project]
 name = "codecenter-engine"
-version = "1.0.0"
+version = "1.0.1"
 requires-python = ">=3.10"
+description = "Moteur d'indexation et de recherche d'Imperial CodeCenter"
+authors = [{ name = "Imperial" }]
+license = { text = "LicenseRef-Imperial-Community-1.0" }
+
+[project.urls]
+Homepage = "https://imperial-corporation.pages.dev/icc"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

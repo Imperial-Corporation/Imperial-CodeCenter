@@ -1,3 +1,6 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 """Configuration globale : chiffrement, persistance, validation."""
 
 import json
@@ -19,7 +22,8 @@ KEY = "sk-secret-123456"
 
 
 def test_fournisseurs_attendus():
-    assert set(PROVIDERS) == {"ollama", "omniroute", "claude", "openai", "groq", "gemini"}
+    assert list(PROVIDERS)[:6] == ["ollama", "omniroute", "claude", "openai", "groq", "gemini"]
+    assert {"openrouter", "mistral", "deepseek", "xai", "together", "fireworks", "cerebras", "nvidia", "cohere", "lmstudio", "llamacpp", "custom"} <= set(PROVIDERS)
     assert PROVIDERS["ollama"].kind == "local" and PROVIDERS["claude"].kind == "remote"
     assert not PROVIDERS["ollama"].needs_api_key and PROVIDERS["openai"].needs_api_key
 

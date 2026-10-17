@@ -9,6 +9,7 @@ Fichier : `config/.env` (développement) ou `/etc/imperial-codecenter/.env` (pro
 | `CODECENTER_DATA_DIR` | `.local/data` | données de l'application |
 | `CODECENTER_SECRET_KEY` / `_FILE` / `CODECENTER_KEY_DIR` | généré | clé Fernet |
 | `CODECENTER_ADMIN_TOKEN` | vide | jeton Bearer des routes d'administration |
+| `CODECENTER_REGISTRATION` | open | `open` ou `closed` : inscriptions de comptes ([comptes.md](comptes.md)) |
 | `CODECENTER_IMPORT_MAX_FILE_KB` | 1000 | taille max d'un fichier importé |
 | `CODECENTER_IMPORT_MAX_UPLOAD_MB` | 50 | taille max d'un envoi |
 | `CODECENTER_MIN_FREE_GB` | 2 | disque libre minimal |
@@ -19,6 +20,6 @@ Fichier : `config/.env` (développement) ou `/etc/imperial-codecenter/.env` (pro
 | `CODECENTER_PROXY_MODE` | off | `off`, `nginx`, `cloudflare` |
 | `CODECENTER_TRUSTED_PROXIES` | loopback | proxys de confiance |
 | `CODECENTER_PUBLIC_HOST` / `CODECENTER_ALLOWED_HOSTS` | vide | hôtes acceptés |
-| `CODECENTER_FORCE_HTTPS` | 0 | HSTS et schéma HTTPS |
+| `CODECENTER_FORCE_HTTPS` | 0 | HSTS, schéma HTTPS et cookie de session `Secure` |
 | `CODECENTER_RATE_LIMIT` | 240 | requêtes/min/IP (mode proxy) |
 | `CODECENTER_CLOUDFLARE_IPS_FILE` | fichier fourni | plages Cloudflare |

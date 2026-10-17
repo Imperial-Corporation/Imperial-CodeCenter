@@ -1,9 +1,17 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+
 [project]
 name = "icc-crawler"
-version = "1.0.0"
-description = "Crawler GitHub d'Imperial CodeCenter : collecte et range automatiquement des scripts sous licence permissive."
+version = "1.0.1"
+description = "Crawler GitHub d'Imperial CodeCenter : collecte et range automatiquement des scripts sous licence permissive. Créé par Imperial (https://imperial-corporation.pages.dev/icc)."
 requires-python = ">=3.10"
+license = { text = "LicenseRef-Imperial-Community-1.0" }
+authors = [{ name = "Imperial" }]
 dependencies = ["httpx>=0.27"]
+
+[project.urls]
+Homepage = "https://imperial-corporation.pages.dev/icc"
 
 [dependency-groups]
 dev = ["pytest>=8"]
