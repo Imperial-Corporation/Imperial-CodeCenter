@@ -225,7 +225,9 @@ def test_progress_json_is_valid_jsonl_with_final_done(tmp_path, capsys):
     progress = [e for e in events if e["event"] == "progress"]
     assert len(progress) >= 2                       # 12 fichiers : au moins tous les 5
     for e in progress:
-        assert set(e) == {"event", "files", "bytes", "repos", "skipped", "elapsed"}
+        assert set(e) == {"event", "files", "bytes", "repos", "skipped", "elapsed", "phase", "repos_done",
+                          "repos_target", "files_target", "repo", "repo_files", "repo_quota", "recent", "errors"}
+        assert e["phase"] in {"discovery", "exploring", "done"} and isinstance(e["recent"], list)
         assert all(isinstance(e[k], (int, float)) for k in ("files", "bytes", "repos", "skipped", "elapsed"))
     assert [e["files"] for e in progress] == sorted(e["files"] for e in progress)
 
@@ -277,7 +279,7 @@ def test_progress_reporter_throttles_by_time_and_by_files():
     def lines():
         return [json.loads(l) for l in stream.getvalue().splitlines()]
 
-    for files in range(1, 5):                       # < 5 fichiers, < 2 s : silence
+    for files in range(1, 5):                       # < 5 fichiers, < 1 s : silence
         stats.files_saved = files
         reporter.progress(stats)
     assert lines() == []
@@ -286,16 +288,45 @@ def test_progress_reporter_throttles_by_time_and_by_files():
     assert len(lines()) == 1 and lines()[0]["files"] == 5
     reporter.progress(stats)                        # rien de neuf
     assert len(lines()) == 1
-    clock["t"] = 1.9
+    clock["t"] = 0.9
     reporter.progress(stats)
     assert len(lines()) == 1
-    clock["t"] = 2.0                                # 2 s écoulées : émis même sans nouveau fichier
+    clock["t"] = 1.0                                # 1 s écoulée : émis même sans nouveau fichier
     reporter.progress(stats)
     assert len(lines()) == 2
     for files in range(6, 11):
         stats.files_saved = files
         reporter.progress(stats)
     assert [e["files"] for e in lines()] == [5, 5, 10]
+
+
+def test_progress_reporter_emits_at_once_on_phase_or_repo_change():
+    stream = io.StringIO()
+    reporter = ProgressReporter(stream, monotonic=lambda: 0.0)
+    stats = Stats()
+
+    def lines():
+        return [json.loads(l) for l in stream.getvalue().splitlines()]
+
+    stats.phase = "discovery"                       # changement de phase : émis tout de suite
+    reporter.progress(stats)
+    reporter.progress(stats)                        # inchangé : silence
+    stats.phase, stats.repos_target = "exploring", 3
+    reporter.progress(stats)
+    stats.current_repo = "o/a"                      # nouveau dépôt : émis tout de suite
+    reporter.progress(stats)
+    stats.remember("o/a/x.py")
+    assert [e["phase"] for e in lines()] == ["discovery", "exploring", "exploring"]
+    assert lines()[-1]["repo"] == "o/a" and lines()[-1]["repos_target"] == 3
+
+
+def test_progress_real_run_reports_phases_repo_and_recent_files(tmp_path, capsys):
+    code, out, _, _ = run(base(tmp_path, "--progress-json"), capsys=capsys)
+    progress = [e for e in json_lines(out) if e["event"] == "progress"]
+    assert code == 0 and progress[0]["phase"] == "discovery"
+    assert any(e["phase"] == "exploring" and e["repos_target"] >= 1 and e["repo"] for e in progress)
+    last = progress[-1]
+    assert last["recent"] and len(last["recent"]) <= 6 and last["files_target"] >= last["files"]
 
 
 def test_progress_reporter_redacts_and_flushes():

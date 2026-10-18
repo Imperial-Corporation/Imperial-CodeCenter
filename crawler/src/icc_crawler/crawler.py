@@ -161,6 +161,18 @@ class Stats:
     stop_reason: str = "termine"
     bytes_written: int = 0
     elapsed_seconds: float = 0.0
+    # Suivi en direct (événements `progress`) : où en est-on, et sur quoi ?
+    phase: str = "start"          # start | discovery | exploring | done
+    repos_target: int = 0         # dépôts à explorer (connu après la découverte)
+    files_target: int = 0         # quota de fichiers demandé
+    current_repo: str = ""
+    repo_files: int = 0           # fichiers enregistrés dans le dépôt en cours
+    repo_quota: int = 0           # quota par dépôt
+    recent: list[str] = field(default_factory=list)   # derniers fichiers enregistrés
+
+    def remember(self, entry: str, keep: int = 6) -> None:
+        self.recent.append(entry)
+        del self.recent[:-keep]
 
     def skip(self, reason: str) -> None:
         self.files_skipped[reason] = self.files_skipped.get(reason, 0) + 1
@@ -337,6 +349,9 @@ class Crawler:
             return 0
 
         self._checkpoint()
+        self.stats.current_repo = full_name
+        self.stats.repo_files = 0
+        self._notify()
         branch = repo.get("default_branch") or "main"
         commit = self.client.get_head_commit(full_name, branch)
 
@@ -351,6 +366,9 @@ class Crawler:
 
         topics = list(repo.get("topics") or [])
         description = str(repo.get("description") or "")
+        self.stats.current_repo = full_name
+        self.stats.repo_files = 0
+        self._notify()
         saved = 0
         license_saved = False
 
@@ -413,6 +431,8 @@ class Crawler:
                 self.stats.bytes_written += written
             saved += 1
             self.stats.files_saved += 1
+            self.stats.repo_files = saved
+            self.stats.remember(f"{full_name}/{path}")
             self._notify()
 
         if self.store and not self.config.dry_run:
@@ -425,8 +445,16 @@ class Crawler:
     def run(self) -> Stats:
         self.budget.start(self.config.destination)
         reason = "termine"
+        self.stats.files_target = self.config.max_files
+        self.stats.repo_quota = self.config.max_files_per_repo
         try:
-            for repo in self.discover():
+            self.stats.phase = "discovery"
+            self._notify()
+            candidates = self.discover()
+            self.stats.repos_target = len(candidates)
+            self.stats.phase = "exploring"
+            self._notify()
+            for repo in candidates:
                 self._checkpoint()
                 if self.stats.files_saved >= self.config.max_files:
                     raise _Stop("limite-fichiers")
@@ -449,5 +477,7 @@ class Crawler:
             message = f"{type(exc).__name__} : {exc}"
             self.stats.errors.append(self.client.redact(message))
         self.stats.stop_reason = reason
+        self.stats.phase = "done"
+        self.stats.current_repo = ""
         self.stats.elapsed_seconds = self.budget.elapsed()
         return self.stats

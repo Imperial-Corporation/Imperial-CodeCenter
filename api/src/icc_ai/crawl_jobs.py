@@ -395,7 +395,8 @@ class CrawlManager:
                 except ValueError:
                     continue
                 if event.get("event") == "progress":
-                    job["progress"] = {k: event.get(k) for k in ("files", "bytes", "repos", "skipped", "elapsed")}
+                    job["progress"] = {k: event[k] for k in PROGRESS_KEYS if k in event}
+                    job["progress"]["updated_at"] = time.time()
                     if time.monotonic() - last_save > 5:
                         self._save()
                         last_save = time.monotonic()
@@ -432,6 +433,9 @@ class CrawlManager:
             else:
                 self._finish(job, "failed", "erreur", f"Le crawler s'est arrêté (code {code}).")
 
+
+PROGRESS_KEYS = ("files", "bytes", "repos", "skipped", "elapsed", "phase", "repos_done", "repos_target",
+                 "files_target", "repo", "repo_files", "repo_quota", "recent", "errors")
 
 REASON_LABELS = {
     "termine": "Collecte terminée.",

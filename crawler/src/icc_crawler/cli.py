@@ -33,7 +33,7 @@ from .storage import Store
 EXIT_OK, EXIT_PROBLEM, EXIT_USAGE = 0, 1, 2
 PROBLEM_REASONS = {"limite-de-debit", "erreur", "disque-presque-plein"}
 
-PROGRESS_EVERY_SECONDS = 2.0
+PROGRESS_EVERY_SECONDS = 1.0
 PROGRESS_EVERY_FILES = 5
 
 
@@ -170,6 +170,7 @@ class ProgressReporter:
         self._monotonic = monotonic
         self._last_time = monotonic()
         self._last_files = 0
+        self._last_where: tuple[str, str] = ("start", "")
 
     def emit(self, payload: dict) -> None:
         line = self._redact(json.dumps(payload, ensure_ascii=False))
@@ -182,15 +183,22 @@ class ProgressReporter:
 
     def progress(self, stats: Stats) -> None:
         now = self._monotonic()
-        if (stats.files_saved - self._last_files < PROGRESS_EVERY_FILES
+        changed = (stats.phase, stats.current_repo) != self._last_where
+        if (not changed and stats.files_saved - self._last_files < PROGRESS_EVERY_FILES
                 and now - self._last_time < PROGRESS_EVERY_SECONDS):
             return
+        self._last_where = (stats.phase, stats.current_repo)
         self._last_time = now
         self._last_files = stats.files_saved
         self.emit({
             "event": "progress", "files": stats.files_saved, "bytes": stats.bytes_written,
             "repos": stats.repos_seen, "skipped": stats.skipped_total,
             "elapsed": round(stats.elapsed_seconds, 1),
+            "phase": stats.phase, "repos_done": stats.repos_done + stats.repos_skipped,
+            "repos_target": stats.repos_target, "files_target": stats.files_target,
+            "repo": stats.current_repo, "repo_files": stats.repo_files,
+            "repo_quota": stats.repo_quota, "recent": list(stats.recent),
+            "errors": len(stats.errors),
         })
 
     def done(self, stats: Stats) -> None:

@@ -4,6 +4,10 @@
 
 Le bouton **globe**, à côté de l'engrenage, ouvre le panneau.
 
+## Progression en direct
+
+Pendant une collecte, le panneau se met à jour chaque seconde : **phase** (recherche des dépôts, puis « Dépôt 3 / 12 »), barre de progression (la plus avancée des limites : fichiers, dépôts, durée, volume), **dépôt en cours** et fichiers déjà pris dans ce dépôt, volume, fichiers ignorés, erreurs, **vitesse** (fichiers/min), **temps restant estimé** et les derniers fichiers enregistrés. Pendant la recherche des dépôts, la barre est indéterminée. Le journal reste replié tant que tu ne l'ouvres pas.
+
 ## Réglages
 
 - **Langages**, requête, nombre de dépôts / fichiers, étoiles minimum.
@@ -33,7 +37,7 @@ python -m icc_crawler crawl --dest /var/lib/imperial-codecenter/codes --language
     --max-gb 2 --stop-at 2026-10-20T03:00 --min-free-gb 5
 ```
 
-Codes de sortie : 0 normal (budget atteint compris), 1 limite de débit / erreur / disque presque plein, 2 arguments invalides. `SIGTERM`/`SIGINT` arrêtent proprement. `--progress-json` émet des événements JSON (utilisé par l'API).
+Codes de sortie : 0 normal (budget atteint compris), 1 limite de débit / erreur / disque presque plein, 2 arguments invalides. `SIGTERM`/`SIGINT` arrêtent proprement. `--progress-json` émet des événements JSON (utilisé par l'API) : `start`, `progress` (phase `discovery`/`exploring`/`done`, `repos_done`/`repos_target`, `repo`, `repo_files`/`repo_quota`, `files`/`files_target`, `bytes`, `skipped`, `errors`, `recent`, `elapsed`) émis au plus une fois par seconde et immédiatement à chaque changement de phase ou de dépôt, puis `done`.
 
 ## Limites
 

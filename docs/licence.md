@@ -14,6 +14,10 @@ Texte complet : [`LICENSE`](../LICENSE) (le français fait foi, traduction angla
 | Faire des dons volontaires | Indiquer que ton œuvre est modifiée, par qui, et ce qui a changé | Retirer ou cacher les crédits, ou laisser croire qu'Imperial approuve ton fork |
 | Usage privé sans diffusion | Donner un nom distinct à un fork | Changer de licence, double licence, ajouter des restrictions (DRM, verrous) |
 
+## Cas particulier : l'équipe Imperial (article 5.8)
+
+Le **créateur** du logiciel et les **membres de l'équipe Imperial Corporation** ne sont pas tenus par les obligations de code ouvert, de gratuité et de non-commercialisation (articles 4 et 5, et interdiction de double licence de l'article 13.3) pour leurs propres usages et distributions. L'exception est **personnelle** : elle ne s'étend ni à leurs clients, partenaires ou sous-traitants, ni à toute autre personne, et ne couvre pas les contributions de tiers au-delà des droits concédés. Quiconque reçoit une copie de leur part reste soumis à la licence, sauf licence écrite distincte. L'attribution (article 3) reste due.
+
 ## Cas fréquents
 
 - **Je l'utilise seul, chez moi** : autorisé, rien à publier tant que tu ne le diffuses à personne.

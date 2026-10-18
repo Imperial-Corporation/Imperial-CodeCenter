@@ -1,0 +1,151 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+#
+# Intégration continue : vérifications, tests (API, crawler, moteur Rust, intégration
+# PostgreSQL) et construction de l'image Docker (sans la publier).
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    name: Versions, licence, interface
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Versions cohérentes
+        run: python3 scripts/version.py check
+      - name: En-têtes de licence
+        run: python3 scripts/add_license_headers.py --check
+      - name: engine/LICENSE identique à LICENSE
+        run: cmp LICENSE engine/LICENSE
+      - name: Syntaxe JavaScript
+        run: for f in frontend/scripts/*.js; do node --check "$f"; done
+      - name: Scripts shell
+        run: |
+          for f in scripts/*.sh scripts/lib/*.sh docker/entrypoint.sh; do bash -n "$f"; done
+          shellcheck --severity=error docker/entrypoint.sh
+
+  api:
+    name: API (Python ${{ matrix.python }})
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: ${{ matrix.python }}
+          enable-cache: true
+          cache-dependency-glob: api/uv.lock
+      - run: uv sync --project api --frozen
+      - run: uv run --project api --frozen pytest -q -p no:cacheprovider
+        working-directory: api
+
+  crawler:
+    name: Crawler
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv run --project crawler --with pytest pytest -q -p no:cacheprovider
+        working-directory: crawler
+
+  engine:
+    name: Moteur Rust
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - run: cargo test --manifest-path engine/Cargo.toml --locked
+
+  integration:
+    name: Intégration moteur + PostgreSQL
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: codecenter
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: codecenter_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U codecenter -d codecenter_test"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      ICC_TEST_DATABASE_URL: postgresql://codecenter:ci@127.0.0.1:5432/codecenter_test
+      DATABASE_URL: postgresql://codecenter:ci@127.0.0.1:5432/codecenter_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - uses: astral-sh/setup-uv@v5
+        with:
+          python-version: "3.12"
+      - run: uv sync --project api --frozen
+      - name: Migrations
+        run: |
+          for f in $(ls config/database/migrations/*.sql | sort); do
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q --single-transaction -f "$f"
+          done
+      - name: Compiler le moteur dans l'environnement de l'API
+        run: uv run --project api --with "maturin>=1.9,<2.0" maturin develop --manifest-path engine/Cargo.toml --python api/.venv/bin/python
+      - run: uv run --project api --frozen pytest -q -p no:cacheprovider tests/test_integration_engine.py
+        working-directory: api
+
+  docker:
+    name: Image Docker (construction + démarrage)
+    runs-on: ubuntu-24.04
+    needs: [checks]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          push: false
+          tags: icc-ci:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+      - name: Démarrage complet (compose) et contrôle de santé
+        env:
+          POSTGRES_PASSWORD: ci0123456789abcdef
+          ICC_VERSION: test
+        run: |
+          docker image tag icc-ci:test ghcr.io/imperial-corporation/imperial-codecenter:test
+          docker compose up -d --no-build
+          for i in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/api/health; then echo; exit 0; fi
+            sleep 2
+          done
+          docker compose logs
+          exit 1
+      - name: Journaux en cas d'échec
+        if: failure()
+        run: docker compose logs --no-color | tail -200

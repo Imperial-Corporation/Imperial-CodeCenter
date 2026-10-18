@@ -269,6 +269,75 @@
             message.dataset.kind = kind || "";
         }
 
+        let logOpen = false;
+
+        function summaryLine(progress) {
+            return `${progress.files ?? 0} fichier(s) · ${formatBytes(progress.bytes)} · ${progress.repos ?? 0} dépôt(s) · ` +
+                `${progress.skipped ?? 0} ignoré(s) · ${formatDuration(progress.elapsed)}`;
+        }
+
+        /* Progression en direct : phase, barre, dépôt en cours, vitesse, temps restant, derniers fichiers. */
+        function liveProgress(job, progress) {
+            const nodes = [];
+            const request = job.request || {};
+            const files = progress.files ?? 0;
+            const elapsed = progress.elapsed ?? 0;
+            const reposTarget = progress.repos_target || 0;
+            const reposDone = progress.repos_done ?? 0;
+            const perRepo = progress.repo_quota || request.max_files_per_repo || 0;
+            const fileGoal = Math.min(progress.files_target || request.max_files || Infinity,
+                reposTarget && perRepo ? reposTarget * perRepo : Infinity);
+
+            const ratios = [];
+            if (Number.isFinite(fileGoal) && fileGoal > 0) ratios.push(files / fileGoal);
+            if (reposTarget) ratios.push(reposDone / reposTarget);
+            if (request.max_minutes) ratios.push(elapsed / (request.max_minutes * 60));
+            if (request.max_gb) ratios.push((progress.bytes ?? 0) / (request.max_gb * 1024 ** 3));
+            const searching = progress.phase !== "exploring" || !reposTarget;
+            const percent = searching ? null : Math.max(0, Math.min(100, Math.round(Math.max(...ratios) * 100)));
+
+            const phase = job.state === "stopping" ? "Arrêt en cours, fin du fichier courant…"
+                : searching ? "Recherche des dépôts…"
+                : `Dépôt ${Math.min(reposDone + 1, reposTarget)} / ${reposTarget}`;
+            const head = el("div", "cp-phase");
+            head.append(el("span", "", phase), el("span", "cp-percent", percent === null ? "…" : `${percent} %`));
+
+            const bar = el("div", "cp-bar");
+            bar.setAttribute("role", "progressbar");
+            bar.setAttribute("aria-valuemin", "0");
+            bar.setAttribute("aria-valuemax", "100");
+            bar.dataset.indeterminate = String(percent === null);
+            if (percent !== null) bar.setAttribute("aria-valuenow", String(percent));
+            const fill = el("div", "cp-bar-fill");
+            if (percent !== null) fill.style.width = `${percent}%`;
+            bar.append(fill);
+            nodes.push(head, bar);
+
+            if (progress.repo) {
+                const quota = perRepo ? ` · ${progress.repo_files ?? 0}/${perRepo} fichiers` : "";
+                nodes.push(el("p", "cp-repo", `${progress.repo}${quota}`));
+            }
+
+            const stats = [`${files} fichier(s)`, formatBytes(progress.bytes), `${progress.skipped ?? 0} ignoré(s)`];
+            if (progress.errors) stats.push(`${progress.errors} erreur(s)`);
+            stats.push(formatDuration(elapsed));
+            if (elapsed >= 10 && files > 0) {
+                const perMinute = (files / elapsed) * 60;
+                stats.push(`${perMinute.toFixed(perMinute < 10 ? 1 : 0)} fichiers/min`);
+                if (!searching && Number.isFinite(fileGoal) && files < fileGoal) {
+                    stats.push(`≈ ${formatDuration(((fileGoal - files) / files) * elapsed)} restantes`);
+                }
+            }
+            nodes.push(el("p", "cp-progress", stats.join(" · ")));
+
+            if (Array.isArray(progress.recent) && progress.recent.length) {
+                const list = el("ul", "cp-recent");
+                for (const path of progress.recent.slice().reverse()) list.append(el("li", "", path));
+                nodes.push(list);
+            }
+            return nodes;
+        }
+
         function renderStatus(status) {
             lastStatus = status;
             statusCard.replaceChildren();
@@ -291,14 +360,16 @@
                 if (job.state === "scheduled" && job.start_at) top.append(el("span", "", `départ ${formatDate(job.start_at)}`));
                 box.append(top);
                 const progress = job.progress || {};
-                if (job.state === "running" || job.state === "stopping" || job.ended_at) {
-                    box.append(el("p", "cp-progress",
-                        `${progress.files ?? 0} fichier(s) · ${formatBytes(progress.bytes)} · ${progress.repos ?? 0} dépôt(s) · ` +
-                        `${progress.skipped ?? 0} ignoré(s) · ${formatDuration(progress.elapsed)}`));
+                if (job.state === "running" || job.state === "stopping") {
+                    box.append(...liveProgress(job, progress));
+                } else if (job.ended_at) {
+                    box.append(el("p", "cp-progress", summaryLine(progress)));
                 }
                 if (job.message) box.append(el("p", "cp-message", job.message));
                 if (job.log && job.log.length) {
                     const details = el("details", "cp-log");
+                    details.open = logOpen;
+                    details.addEventListener("toggle", () => { logOpen = details.open; });
                     details.append(el("summary", "", "Journal"));
                     details.append(el("pre", "", job.log.join("\n")));
                     box.append(details);
@@ -327,7 +398,7 @@
             window.clearTimeout(timer);
             if (panel.hidden) return;
             const active = lastStatus && lastStatus.active;
-            timer = window.setTimeout(refresh, active ? 3000 : 15000);
+            timer = window.setTimeout(refresh, active ? 1000 : 15000);
         }
 
         function handleError(error) {

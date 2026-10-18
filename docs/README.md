@@ -1,7 +1,8 @@
-# Documentation d'Imperial CodeCenter — v1.0.2
+# Documentation d'Imperial CodeCenter — v1.0.3
 
 | Document | Contenu |
 |---|---|
+| [docker.md](docker.md) | Déploiement Docker, sauvegardes, publication automatique sur GitHub (ghcr.io) |
 | [installation.md](installation.md) | Installer, mettre à jour, désinstaller, diagnostiquer (`install.sh`, `doctor.sh`) |
 | [permissions.md](permissions.md) | Pourquoi « Permission denied (os error 13) » arrivait, et comment c'est réglé |
 | [comptes.md](comptes.md) | Comptes (pseudo + mot de passe), barre latérale, discussions enregistrées |

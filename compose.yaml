@@ -1,0 +1,59 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+#
+# Démarrage :   cp docker/env.exemple .env   (puis choisis POSTGRES_PASSWORD)
+#               docker compose up -d
+# Interface :   http://127.0.0.1:8000      (voir docs/docker.md)
+
+name: imperial-codecenter
+
+services:
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: codecenter
+      POSTGRES_DB: imperial_codecenter
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Définis POSTGRES_PASSWORD dans .env (voir docker/env.exemple)}
+    volumes:
+      - icc-db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U codecenter -d imperial_codecenter"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    security_opt:
+      - no-new-privileges:true
+
+  app:
+    # Image publiée par GitHub Actions ; `docker compose build` la reconstruit depuis les sources.
+    image: ghcr.io/imperial-corporation/imperial-codecenter:${ICC_VERSION:-latest}
+    build:
+      context: .
+      args:
+        VERSION: ${ICC_VERSION:-dev}
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DATABASE_URL: postgresql://codecenter:${POSTGRES_PASSWORD}@db:5432/imperial_codecenter
+    ports:
+      # Local par défaut. Pour l'exposer, passe par un reverse proxy (docs/proxy.md).
+      - "${ICC_BIND:-127.0.0.1}:${ICC_PORT:-8000}:8000"
+    volumes:
+      - icc-data:/data
+    read_only: true
+    tmpfs:
+      - /tmp
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  icc-db:
+  icc-data:

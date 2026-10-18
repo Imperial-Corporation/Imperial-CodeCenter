@@ -29,3 +29,10 @@ Composants tiers
   licence permissive ; ces fichiers restent soumis à leur licence d'origine et à
   la mention de leurs auteurs (voir le manifeste de provenance du collecteur).
   Les 66 scripts de examples/ font partie du Logiciel et suivent la licence.
+
+Équipe Imperial (article 5.8 de la licence)
+  Le créateur du Logiciel et les membres de l'équipe Imperial Corporation sont
+  un cas particulier : les obligations de code ouvert, de gratuité et de
+  non-commercialisation (articles 4 et 5) ne s'appliquent pas à eux pour leurs
+  propres usages et distributions. Cette exception est personnelle et ne
+  s'étend à aucun tiers.

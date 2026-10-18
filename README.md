@@ -1,6 +1,8 @@
 # Imperial CodeCenter
 
-**Version 1.0.2** — Moteur de recherche de code et de documentation, assisté par IA.
+**Version 1.0.3** — Moteur de recherche de code et de documentation, assisté par IA.
+
+Exception : le créateur et les membres de l'équipe Imperial Corporation ne sont pas tenus par ces obligations (article 5.8, personnelle et non transmissible).
 
 Développeur en chef : **yolezz** · Organisation : **Imperial** · Idée originale : **HyperDemoned**
 
@@ -28,6 +30,8 @@ frontend/ (HTML/CSS/JS)  ──HTTP──▶  api/ (FastAPI + Python)  ──PyO
 | `frontend/` | Interface : accueil, discussion, barre latérale (comptes, discussions enregistrées), panneaux de configuration IA et crawler. |
 | `config/` | Migrations SQL, `.env`, service systemd, paramètres de déploiement. |
 | `crawler/` | Collecteur GitHub (`icc_crawler`) : licences permissives, planification, objectifs d'arrêt, sécurité disque. |
+| `Dockerfile`, `compose.yaml`, `docker/` | Déploiement Docker (voir [docs/docker.md](docs/docker.md)). |
+| `.github/` | Workflows CI et publication automatique. |
 | `examples/` | 66 scripts d'exemple installés au premier déploiement. |
 | `docs/` | Documentation complète en français. |
 | `scripts/` | `install.sh` (tout en un), `build.sh`, `deploy.sh`, `release.sh`, `fix_permissions.sh`, `doctor.sh`, `setup_proxy.sh`, `update_cloudflare_ips.sh`, `install_examples.sh`, `clean.sh`. |
@@ -69,6 +73,15 @@ Les erreurs Rust deviennent `ValueError` (entrée invalide), `LookupError` (intr
 ## Installation et lancement
 
 Prérequis : Linux, PostgreSQL, [`uv`](https://docs.astral.sh/uv/), Python ≥ 3.10. Rust (`rustup`, `rustc`, `cargo`) est installé automatiquement s'il manque, et cloudflared aussi en mode Cloudflare.
+
+### Docker (le plus simple)
+
+```bash
+cp docker/env.exemple .env      # choisis POSTGRES_PASSWORD (openssl rand -hex 24)
+docker compose up -d            # http://127.0.0.1:8000 — crée ton compte en premier (administrateur)
+```
+
+L'image (`ghcr.io/imperial-corporation/imperial-codecenter`, amd64 + arm64) est publiée automatiquement par GitHub Actions à chaque tag `vX.Y.Z`. Détails, sauvegardes, mise à jour, publication d'une version : [docs/docker.md](docs/docker.md).
 
 ### Développement
 
@@ -126,6 +139,17 @@ Le bouton à engrenage (dans la barre supérieure) ouvre le panneau :
 La configuration est **propre à chaque compte** et chiffrée avec une clé protégée par ton mot de passe : personne d'autre (administrateur compris) ne peut lire ni utiliser tes clés. Il faut un compte pour utiliser l'IA. Mot de passe oublié = clés à ressaisir. Les réglages des autres fournisseurs sont conservés quand on change.
 
 Particularités gérées par les connecteurs : système séparé et blocs `tool_use`/`tool_result` (Claude) ; arguments d'outils en chaîne JSON, `max_completion_tokens` vs `max_tokens` (OpenAI-compatibles) ; schémas OpenAPI restreints, `functionCall` sans identifiant, clé en en-tête (Gemini) ; arguments objets, `num_ctx`, modèle sans outils (Ollama, repli automatique sans outils).
+
+## Nouveautés de la 1.0.3
+
+- **Docker** : `Dockerfile` multi-étapes (moteur Rust compilé, image finale sans compilateur, utilisateur non-root, système de fichiers en lecture seule) et `compose.yaml` avec PostgreSQL ; migrations et clé de chiffrement gérées au démarrage.
+- **Publication automatique** : GitHub Actions teste (API, crawler, moteur, PostgreSQL, démarrage de l'image) puis, à chaque tag, publie l'image multi-architecture sur ghcr.io, la wheel et le sdist du moteur, et crée la release avec les notes du CHANGELOG. `scripts/version.py` garde toutes les versions cohérentes.
+- **Licence** : cas particulier de l'équipe Imperial (article 5.8) : le créateur et les membres de l'équipe Imperial Corporation ne sont pas soumis aux obligations de code ouvert, de gratuité et de non-commercialisation.
+- **Crawler en direct** : phase, barre de progression, dépôt en cours, fichiers par dépôt, vitesse, temps restant estimé et derniers fichiers enregistrés, mis à jour chaque seconde.
+
+## Nouveautés de la 1.0.2
+
+Comptes obligatoires, clés API liées au compte et chiffrées par le mot de passe, sécurité renforcée, interface allégée, 66 exemples : voir le [CHANGELOG](CHANGELOG.md).
 
 ## Nouveautés de la 1.0.1
 

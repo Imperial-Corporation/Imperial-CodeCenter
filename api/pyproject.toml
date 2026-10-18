@@ -3,7 +3,7 @@
 
 [project]
 name = "codecenter-api"
-version = "1.0.2"
+version = "1.0.3"
 requires-python = ">=3.10"
 license = { text = "LicenseRef-Imperial-Community-1.0" }
 authors = [{ name = "Imperial" }]

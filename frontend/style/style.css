@@ -1647,3 +1647,19 @@ h6.ai-md-h { font-size: 13.5px; color: var(--muted); text-transform: uppercase; 
     .settings-panel,
     .crawler-panel { right: 10px; width: calc(100vw - 20px); }
 }
+
+/* Crawler : progression en direct */
+.cp-phase { display: flex; justify-content: space-between; margin-top: 8px; font-size: 12.5px; color: var(--text); }
+.cp-percent { color: var(--muted); font-variant-numeric: tabular-nums; }
+.cp-bar { height: 5px; margin-top: 5px; overflow: hidden; border-radius: 999px; background: var(--border); }
+.cp-bar-fill { height: 100%; width: 0; border-radius: inherit; background: var(--accent); transition: width .6s ease; }
+.cp-bar[data-indeterminate="true"] .cp-bar-fill { width: 35%; animation: cp-slide 1.3s ease-in-out infinite; }
+@keyframes cp-slide { 0% { margin-left: -35%; } 100% { margin-left: 100%; } }
+.cp-repo { margin: 7px 0 0; overflow: hidden; color: var(--text); font-size: 12.5px; text-overflow: ellipsis; white-space: nowrap; }
+.cp-recent { margin: 6px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 11.5px; }
+.cp-recent li { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cp-recent li:first-child { color: var(--text); }
+@media (prefers-reduced-motion: reduce) {
+    .cp-bar-fill { transition: none; }
+    .cp-bar[data-indeterminate="true"] .cp-bar-fill { animation: none; margin-left: 0; width: 100%; opacity: .4; }
+}

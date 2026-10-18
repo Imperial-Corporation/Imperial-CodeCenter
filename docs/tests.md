@@ -2,7 +2,7 @@
 
 ```bash
 cd api     && uv sync && uv run pytest      # 639 tests (4 d'intégration ignorés sans base)
-cd crawler && uv run pytest                  # 254 tests
+cd crawler && uv run pytest                  # 256 tests
 cd engine  && cargo test                     # 23 tests
 ```
 

@@ -77,6 +77,11 @@ Article 1 — Définitions
      mettre à disposition de tiers par quelque moyen que ce soit, y compris
      par accès réseau (service en ligne, SaaS, API publique).
 
+1.11 « Équipe Imperial » : le créateur du Logiciel et les membres de l'équipe
+     Imperial Corporation, tels que désignés dans le fichier NOTICE ou sur le
+     site officiel d'Imperial (https://imperial-corporation.pages.dev/icc) ou
+     dans l'organisation GitHub « Imperial-Corporation ».
+
 Article 2 — Licence accordée
 
 Sous réserve du respect de toutes les conditions ci-dessous, Imperial Vous
@@ -200,6 +205,21 @@ Article 5 — Usages interdits : aucun Projet Payant, tout doit être gratuit
      Logiciel payant : leurs propres tarifs ne sont pas visés par le présent
      article, à condition que Vous ne revendiez pas cet accès avec le Logiciel
      et que Vous n'en tiriez aucune marge.
+
+5.8  Cas particulier — Équipe Imperial : les obligations des articles 4 et 5
+     (code ouvert obligatoire, gratuité, interdiction de la distribution
+     commercialisée ou liée à un Projet Payant) et l'interdiction de double
+     licence de l'article 13.3 ne s'appliquent pas au créateur du Logiciel ni
+     aux membres de l'Équipe Imperial, pour leurs propres usages, productions et
+     distributions du Logiciel et de leurs propres contributions. Cette
+     exception est personnelle : elle ne se transmet pas, ne s'étend ni à leurs
+     clients, partenaires, sous-traitants ou ayants droit, ni à toute personne
+     qui n'appartient pas à l'Équipe Imperial, et ne concerne pas les
+     contributions de tiers au-delà des droits qui ont été concédés à l'Équipe
+     Imperial. Tout destinataire d'une copie reçue de l'Équipe Imperial reste
+     soumis à la présente licence pour l'usage qu'il en fait, sauf licence
+     écrite distincte accordée par l'Équipe Imperial. L'article 3 (attribution)
+     et les articles 7 à 12 continuent de s'appliquer.
 
 Article 6 — Transparence des modifications et contributions
 
@@ -438,6 +458,21 @@ this text before any high-stakes use.
  services that the Software calls (for example a pay-per-use AI API) do not
  make the Software paid: their own prices are not covered by this Article,
  provided You do not resell that access with the Software or draw any margin.
+
+ Special case — Imperial Team: the obligations of Articles 4 and 5 (mandatory
+ open source, free of charge, ban on commercial or Paid-Project distribution)
+ and the dual-license ban of Article 13.3 do not apply to the creator of the
+ Software or to the members of the Imperial team (the "Imperial Team": the
+ creator and the Imperial Corporation team members named in the NOTICE file,
+ on the official website or in the "Imperial-Corporation" GitHub organization),
+ for their own uses, productions and distributions of the Software and of their
+ own contributions. This exception is personal: it is not transferable, does
+ not extend to their customers, partners, contractors or successors, nor to
+ anyone outside the Imperial Team, and does not cover third-party contributions
+ beyond the rights granted to the Imperial Team. Any recipient of a copy
+ received from the Imperial Team remains bound by this license for its own use,
+ unless the Imperial Team grants a separate written license. Article 3
+ (attribution) and Articles 7 to 12 continue to apply.
 
 6. Transparency and contributions. Every modification You Convey must carry a
  clearly visible notice of the modification and its date. Unless otherwise
