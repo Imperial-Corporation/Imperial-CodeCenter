@@ -19,7 +19,7 @@ crate-type = ["cdylib"]
 # ==========================
 # Python implementation
 # ==========================
-pyo3 = { version = "0.27", features = ["extension-module"] }
+pyo3 = { version = "0.30", features = ["extension-module"] }
 
 # ==========================
 # Data manipulation
