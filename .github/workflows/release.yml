@@ -156,7 +156,7 @@ jobs:
           digest="$(docker buildx imagetools inspect "${IMAGE}:${{ steps.meta.outputs.version }}" --format '{{json .Manifest}}' | jq -r '.digest')"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
       - name: Attestation de provenance
-        uses: actions/attest-build-provenance@v2
+        uses: actions/attest-build-provenance@v4
         with:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.inspect.outputs.digest }}
