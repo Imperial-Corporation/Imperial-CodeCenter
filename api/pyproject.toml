@@ -9,7 +9,7 @@ license = { text = "LicenseRef-Imperial-Community-1.0" }
 authors = [{ name = "Imperial" }]
 dependencies = [
     "cryptography>=43",
-    "fastapi>=0.115",
+    "fastapi>=0.143.2",
     "httpx>=0.27",
     "python-multipart>=0.0.32",
     "uvicorn[standard]>=0.34",
