@@ -53,9 +53,9 @@ jobs:
         with:
           python-version: "3.12"
       - run: uv sync --project api --frozen
-      - run: uv run --project api --frozen pytest -q -p no:cacheprovider
+      - run: uv run --frozen pytest -q -p no:cacheprovider
         working-directory: api
-      - run: uv run --project crawler --with pytest pytest -q -p no:cacheprovider
+      - run: uv run --with pytest pytest -q -p no:cacheprovider
         working-directory: crawler
 
   docker:

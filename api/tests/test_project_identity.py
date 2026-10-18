@@ -62,7 +62,15 @@ def test_en_tetes_de_licence_presents():
     assert result.returncode == 0, result.stdout
 
 
-def test_route_about_et_openapi():
+def test_route_about_et_openapi(monkeypatch):
+    try:
+        import codecenter_engine  # noqa: F401
+    except ImportError:  # moteur Rust non compilé (CI sans maturin) : un faux module suffit ici
+        import types
+        fake = types.ModuleType("codecenter_engine")
+        for name in ("get_stats", "healt", "start_watcher", "stop_watcher"):
+            setattr(fake, name, lambda *a, **k: None)
+        monkeypatch.setitem(sys.modules, "codecenter_engine", fake)
     import main
 
     client = TestClient(main.app)

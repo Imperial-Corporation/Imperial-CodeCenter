@@ -56,7 +56,7 @@ jobs:
           enable-cache: true
           cache-dependency-glob: api/uv.lock
       - run: uv sync --project api --frozen
-      - run: uv run --project api --frozen pytest -q -p no:cacheprovider
+      - run: uv run --frozen pytest -q -p no:cacheprovider
         working-directory: api
 
   crawler:
@@ -67,7 +67,7 @@ jobs:
       - uses: astral-sh/setup-uv@v5
         with:
           python-version: "3.12"
-      - run: uv run --project crawler --with pytest pytest -q -p no:cacheprovider
+      - run: uv run --with pytest pytest -q -p no:cacheprovider
         working-directory: crawler
 
   engine:
@@ -114,8 +114,11 @@ jobs:
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q --single-transaction -f "$f"
           done
       - name: Compiler le moteur dans l'environnement de l'API
-        run: uv run --project api --with "maturin>=1.9,<2.0" maturin develop --manifest-path engine/Cargo.toml --python api/.venv/bin/python
-      - run: uv run --project api --frozen pytest -q -p no:cacheprovider tests/test_integration_engine.py
+        run: |
+          uv pip install --python api/.venv/bin/python "maturin>=1.9,<2.0"
+          VIRTUAL_ENV="$PWD/api/.venv" api/.venv/bin/maturin develop --uv --manifest-path engine/Cargo.toml
+      - name: Tests d'intégration
+        run: .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_integration_engine.py
         working-directory: api
 
   docker:

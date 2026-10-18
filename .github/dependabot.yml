@@ -1,16 +1,27 @@
 # Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
 # Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+# Une seule pull request groupée par écosystème, une fois par mois (pas de flot de PR).
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 2
+    groups:
+      actions: { patterns: ["*"] }
   - package-ecosystem: docker
     directory: /
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 2
   - package-ecosystem: cargo
     directory: /engine
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 2
+    groups:
+      rust: { patterns: ["*"] }
   - package-ecosystem: uv
     directory: /api
-    schedule: { interval: weekly }
+    schedule: { interval: monthly }
+    open-pull-requests-limit: 2
+    groups:
+      python: { patterns: ["*"] }
