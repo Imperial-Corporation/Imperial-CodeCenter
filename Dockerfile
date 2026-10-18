@@ -7,7 +7,7 @@
 # ---------------------------------------------------------------------------
 # Étape 1 — compilation du moteur Rust et export des dépendances Python
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS builder
+FROM python:3.14-slim-bookworm AS builder
 
 ENV RUSTUP_HOME=/opt/rustup \
     CARGO_HOME=/opt/cargo \
@@ -34,7 +34,7 @@ RUN maturin build --release --manifest-path engine/Cargo.toml --out /wheels
 # ---------------------------------------------------------------------------
 # Étape 2 — image d'exécution (sans compilateur)
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim-bookworm AS runtime
+FROM python:3.14-slim-bookworm AS runtime
 
 ARG VERSION=dev
 ARG REVISION=unknown
