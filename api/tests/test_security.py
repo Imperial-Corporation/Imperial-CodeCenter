@@ -100,3 +100,26 @@ def test_api_jamais_en_cache(tmp_path):
     app.add_middleware(ProxyMiddleware, settings=ProxySettings("off"))
     r = TestClient(app).get("/api/v1/auth/me")
     assert r.headers["cache-control"] == "no-store"
+
+
+def test_localhost_en_ipv6_et_ipv4_mappee(monkeypatch):
+    """`localhost` se résout souvent en ::1 (adresse « réservée » pour Python) : reste du local légitime."""
+    import socket
+    monkeypatch.setenv("CODECENTER_PROVIDER_NETWORK", "any")
+    for url in ("http://[::1]:11434", "http://[::ffff:127.0.0.1]:11434"):
+        check_provider_url(url)
+
+    def resolves(host, *args, **kwargs):
+        return [(socket.AF_INET6, socket.SOCK_STREAM, 6, "", ("::1", 0, 0, 0)),
+                (socket.AF_INET, socket.SOCK_STREAM, 6, "", ("127.0.0.1", 0))]
+
+    monkeypatch.setattr(socket, "getaddrinfo", resolves)
+    check_provider_url("http://localhost:8080")
+    monkeypatch.setenv("CODECENTER_PROVIDER_NETWORK", "public")
+    with pytest.raises(ConfigError):
+        check_provider_url("http://localhost:8080")
+    # les adresses dangereuses restent refusées dans tous les modes
+    monkeypatch.setenv("CODECENTER_PROVIDER_NETWORK", "any")
+    for url in ("http://169.254.169.254/latest", "http://[fe80::1]/", "http://0.0.0.0:80", "http://[::ffff:169.254.169.254]/"):
+        with pytest.raises(ConfigError):
+            check_provider_url(url)

@@ -194,6 +194,10 @@ def nginx_test(tmp_path, site: str):
     """Teste `site` dans un nginx.conf principal temporaire (aucun processus lancé)."""
     for sub in ("body", "proxy", "fastcgi", "uwsgi", "scgi"):
         (tmp_path / sub).mkdir(exist_ok=True)
+    # `nginx -t` ouvre vraiment les ports : sans droits root (CI), 80 et 443 sont refusés. On teste la
+    # syntaxe avec des ports hauts, le reste de la configuration est inchangé.
+    site = re.sub(r"(listen (?:\[::\]:)?)80\b", r"\g<1>18080", site)
+    site = re.sub(r"(listen (?:\[::\]:)?)443\b", r"\g<1>18443", site)
     (tmp_path / "site.conf").write_text(site, encoding="utf-8")
     main_conf = tmp_path / "nginx.conf"
     main_conf.write_text(

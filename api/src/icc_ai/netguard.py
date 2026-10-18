@@ -65,7 +65,11 @@ def check_provider_url(url: str) -> None:
         raise ConfigError("URL de fournisseur invalide.")
     public_only = _network_mode() == "public"
     for ip in _addresses(host):
-        if ip.is_link_local or ip.is_unspecified or ip.is_multicast or ip.is_reserved:
+        mapped = getattr(ip, "ipv4_mapped", None)
+        if mapped is not None:          # ::ffff:a.b.c.d se juge comme l'IPv4 qu'elle encapsule
+            ip = mapped
+        # ::1 (localhost en IPv6) est « réservé » pour Python mais reste du local légitime (Ollama…).
+        if not ip.is_loopback and (ip.is_link_local or ip.is_unspecified or ip.is_multicast or ip.is_reserved):
             raise ForbiddenProviderUrl("Cette adresse n'est pas autorisée pour un fournisseur IA.")
         if ip.is_loopback or ip.is_private:
             if public_only:
