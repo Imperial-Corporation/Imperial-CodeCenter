@@ -44,15 +44,16 @@ _SPECIFIC_CUES = re.compile(
 GUIDANCE = {
     "overview": (
         "MODE APERÇU. La question est générale : donne d'abord une réponse SIMPLE, complète et directement "
-        "utilisable (un exemple minimal qui fonctionne), en t'appuyant sur 1 à 3 sources génériques. "
+        "utilisable (un exemple minimal qui fonctionne), en t'appuyant sur 2 à 4 sources génériques que tu as vraiment lues. "
         "N'explore PAS les sujets annexes que l'utilisateur n'a pas demandés (sécurité, chiffrement, "
         "authentification, déploiement, optimisation, tests avancés…) : ne les cherche pas et ne les développe "
-        "pas. Utilise au plus 2 appels d'outils. Termine en proposant 2 à 4 pistes d'approfondissement dans "
+        "pas. Utilise au plus 3 appels d'outils, et sers-t'en : relis un fichier plutôt que de deviner. Termine en proposant 2 à 4 pistes d'approfondissement dans "
         "`follow_ups` (questions courtes que l'utilisateur pourra poser ensuite)."
     ),
     "focused": (
-        "MODE CIBLÉ. Réponds précisément à la question posée avec les sources pertinentes et reste dans le sujet "
-        "demandé. Tu peux proposer 0 à 3 pistes dans `follow_ups`."
+        "MODE CIBLÉ. Réponds précisément à la question posée en exploitant tes outils : lis les fichiers "
+        "pertinents (read_file), relance search_code avec d'autres mots-clés si besoin, croise plusieurs sources, "
+        "et reste dans le sujet demandé. Tu peux proposer 0 à 3 pistes dans `follow_ups`."
     ),
     "deep": (
         "MODE APPROFONDI. L'utilisateur veut aller plus loin : cherche activement les sources spécialisées "
@@ -77,9 +78,9 @@ class Depth:
 
 
 _LEVELS = {
-    "overview": Depth("overview", search_limit=6, max_attached=2, tool_cap=2, keep_ratio=0.35, attach_ratio=0.6),
-    "focused": Depth("focused", search_limit=None, max_attached=5, tool_cap=None, keep_ratio=0.25, attach_ratio=0.45),
-    "deep": Depth("deep", search_limit=None, max_attached=8, tool_cap=None, keep_ratio=0.15, attach_ratio=0.3),
+    "overview": Depth("overview", search_limit=8, max_attached=3, tool_cap=3, keep_ratio=0.2, attach_ratio=0.4),
+    "focused": Depth("focused", search_limit=None, max_attached=6, tool_cap=None, keep_ratio=0.15, attach_ratio=0.3),
+    "deep": Depth("deep", search_limit=None, max_attached=10, tool_cap=None, keep_ratio=0.08, attach_ratio=0.2),
 }
 
 

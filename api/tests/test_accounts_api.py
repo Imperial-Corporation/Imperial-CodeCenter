@@ -20,7 +20,6 @@ ANSWER = json.dumps({"summary": "Réponse **ok**", "used_sources": ["S1"], "foll
 
 
 def build(store, tmp_path, script=None, registration_open=True):
-    store.save("ollama", make_config())
     engine = FakeEngine()
     provider = FakeProvider(script or [turn(ANSWER)] * 6)
     service = SearchService(store, engine, provider_factory=lambda r, t=None: provider)
@@ -43,8 +42,14 @@ def client(app):
     return TestClient(app)
 
 
-def signup(client, name="alice", password="motdepasse-ok"):
-    return client.post("/api/v1/auth/register", json={"username": name, "password": password})
+OLLAMA = {"base_url": "http://127.0.0.1:11434", "model": "llama3.1", "activate": True}
+
+
+def signup(client, name="alice", password="motdepasse-ok", configure=True):
+    response = client.post("/api/v1/auth/register", json={"username": name, "password": password})
+    if configure and response.status_code == 200:  # la configuration IA est propre à chaque compte
+        assert client.put("/api/v1/ai/providers/ollama", json=OLLAMA).status_code == 200
+    return response
 
 
 def test_me_visiteur_puis_connecte(client):
@@ -69,7 +74,7 @@ def test_cookie_secure_en_https(app):
 
 def test_cookie_secure_force(app, monkeypatch):
     monkeypatch.setenv("CODECENTER_FORCE_HTTPS", "1")
-    assert "secure" in signup(TestClient(app)).headers["set-cookie"].lower()
+    assert "secure" in signup(TestClient(app), configure=False).headers["set-cookie"].lower()
 
 
 def test_deconnexion_invalide_la_session(client):
@@ -223,3 +228,22 @@ def test_restauration_robuste_aux_donnees_anciennes():
                         {"question": "q2", "response": {}}])
     session = chat.get(cid)
     assert session.history == [] and session.turns == 2 and len(session.registry) == 0
+
+
+def test_conversation_d_un_autre_compte_inutilisable(app):
+    alice, bob = TestClient(app), TestClient(app)
+    signup(alice, "alice")
+    signup(bob, "bobby")
+    conversation, _ = ask(alice)
+    stolen = bob.post("/api/v1/chat", json={"conversation_id": conversation, "message": "suite"})
+    assert stolen.status_code == 404 and stolen.json()["code"] == "chat_not_found"
+    assert bob.post("/api/v1/chats", json={"conversation_id": conversation}).status_code == 404
+    assert alice.post("/api/v1/chats", json={"conversation_id": conversation}).status_code == 200
+
+
+def test_session_ancienne_sans_cle_est_refusee(app):
+    c = TestClient(app)
+    user = app.state.ai.accounts.register("alice", "motdepasse-ok")
+    c.cookies.set("icc_session", app.state.ai.accounts.create_session(user["id"]))  # sans clé de données
+    assert c.get("/api/v1/auth/me").json()["user"] is None
+    assert c.get("/api/v1/ai/config").status_code == 401

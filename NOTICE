@@ -6,6 +6,7 @@ Based on Imperial CodeCenter, created by Imperial
 
   Organisation d'origine : Imperial
   Site officiel / projet d'origine : https://imperial-corporation.pages.dev/icc
+  Dépôt d'origine : https://github.com/Imperial-Corporation/Imperial-CodeCenter
   Licence : Imperial Community License 1.0 (fichier LICENSE)
 
 Crédits
@@ -27,4 +28,4 @@ Composants tiers
   leurs propres licences. Le collecteur GitHub ne récupère que des fichiers sous
   licence permissive ; ces fichiers restent soumis à leur licence d'origine et à
   la mention de leurs auteurs (voir le manifeste de provenance du collecteur).
-  Les 35 scripts de examples/ font partie du Logiciel et suivent la licence.
+  Les 66 scripts de examples/ font partie du Logiciel et suivent la licence.

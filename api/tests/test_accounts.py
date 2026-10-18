@@ -215,3 +215,93 @@ def test_sqlite_injection_inoffensive(store):
     with pytest.raises(AccountError):
         store.authenticate("alice' OR '1'='1", "x", "")
     assert json.dumps(store.list_chats("' OR 1=1 --")) == "[]"
+
+
+# --------------------------------------------------------------------------
+# Chiffrement par compte (DEK enveloppée par le mot de passe et la session)
+# --------------------------------------------------------------------------
+
+CONFIG = {"version": 1, "active": "openai", "providers": {"openai": {"api_key": "sk-secret-123456"}}}
+
+
+def test_config_chiffree_et_illisible_sans_la_cle(store, tmp_path):
+    user = store.register("alice", "motdepasse-ok")
+    store.save_ai_config(user["id"], user["dek"], CONFIG)
+    assert store.load_ai_config(user["id"], user["dek"]) == CONFIG
+    raw = store._db.execute("SELECT blob FROM ai_configs").fetchone()["blob"]
+    assert "sk-secret" not in raw and "openai" not in raw
+    store._db.execute("PRAGMA wal_checkpoint(FULL)")
+    assert b"sk-secret" not in (tmp_path / "accounts.db").read_bytes()
+    with pytest.raises(AccountError):
+        store.load_ai_config(user["id"], b"\x01" * 32)  # mauvaise clé
+
+
+def test_la_cle_d_un_compte_n_ouvre_pas_la_config_d_un_autre(store):
+    a = store.register("alice", "motdepasse-ok")
+    b = store.register("bobby", "motdepasse-bob")
+    store.save_ai_config(a["id"], a["dek"], CONFIG)
+    assert a["dek"] != b["dek"]
+    # Même si on copie le bloc d'Alice chez Bob, la clé de Bob ne l'ouvre pas (données liées au compte).
+    blob = store._db.execute("SELECT blob FROM ai_configs WHERE user_id = ?", (a["id"],)).fetchone()["blob"]
+    store._db.execute("INSERT INTO ai_configs(user_id, blob, updated_at) VALUES (?,?,0)", (b["id"], blob))
+    with pytest.raises(AccountError):
+        store.load_ai_config(b["id"], b["dek"])
+
+
+def test_connexion_redonne_la_meme_cle_et_le_mauvais_mot_de_passe_non(store):
+    user = store.register("alice", "motdepasse-ok")
+    assert store.authenticate("alice", "motdepasse-ok")["dek"] == user["dek"]
+    with pytest.raises(AccountError):
+        store.authenticate("alice", "mauvais-mdp-123")
+
+
+def test_session_deverrouille_la_cle_et_se_ferme(store):
+    user = store.register("alice", "motdepasse-ok")
+    token = store.create_session(user["id"], user["dek"])
+    assert store.dek_for_token(token, user["id"]) == user["dek"]
+    assert store.dek_for_token(token, "autre-compte") is None
+    stored = store._db.execute("SELECT wrapped_dek FROM sessions").fetchone()["wrapped_dek"]
+    assert token not in stored
+    store.end_session(token)
+    assert store.dek_for_token(token, user["id"]) is None
+
+
+def test_session_sans_cle_ne_deverrouille_rien(store):
+    user = store.register("alice", "motdepasse-ok")
+    token = store.create_session(user["id"])  # ancienne session
+    assert store.dek_for_token(token, user["id"]) is None
+
+
+def test_changement_de_mot_de_passe_conserve_la_config(store):
+    user = store.register("alice", "motdepasse-ok")
+    store.save_ai_config(user["id"], user["dek"], CONFIG)
+    store.change_password(user["id"], "motdepasse-ok", "nouveau-mdp-ok")
+    again = store.authenticate("alice", "nouveau-mdp-ok")
+    assert store.load_ai_config(user["id"], again["dek"]) == CONFIG
+    with pytest.raises(AccountError):
+        store.authenticate("alice", "motdepasse-ok")
+
+
+def test_compte_de_la_1_0_1_recoit_une_cle_a_la_connexion(tmp_path):
+    path = tmp_path / "old.db"
+    db = sqlite3.connect(path)
+    db.executescript(
+        "CREATE TABLE users (id TEXT PRIMARY KEY, username TEXT NOT NULL UNIQUE COLLATE NOCASE,"
+        " password_hash TEXT NOT NULL, created_at REAL NOT NULL);"
+        "CREATE TABLE sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, created_at REAL NOT NULL,"
+        " expires_at REAL NOT NULL);")
+    db.execute("INSERT INTO users VALUES ('u1','vieux',?,0)", (hash_password("motdepasse-ok"),))
+    db.commit()
+    db.close()
+    s = AccountStore(path)
+    first = s.authenticate("vieux", "motdepasse-ok")
+    assert len(first["dek"]) == 32
+    assert s.authenticate("vieux", "motdepasse-ok")["dek"] == first["dek"]  # stable ensuite
+    s.close()
+
+
+def test_suppression_du_compte_efface_la_config(store):
+    user = store.register("alice", "motdepasse-ok")
+    store.save_ai_config(user["id"], user["dek"], CONFIG)
+    store.delete_account(user["id"], "motdepasse-ok")
+    assert store._db.execute("SELECT COUNT(*) FROM ai_configs").fetchone()[0] == 0

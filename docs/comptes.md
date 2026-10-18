@@ -26,3 +26,11 @@ Un rail étroit à gauche se déplie quand la souris (ou le clavier) s'en approc
 4. Une discussion enregistrée se rouvre depuis la barre latérale, même après un redémarrage ; on peut la poursuivre (les sources et l'historique sont reconstruits).
 
 Limites : 200 discussions par compte, 3 Mo par discussion.
+
+## Clés et configuration liées au compte (1.0.2)
+
+- Un compte est **obligatoire** pour chercher, discuter et configurer l'IA.
+- À l'inscription, une clé de données aléatoire est créée ; elle est chiffrée par une clé dérivée du mot de passe (scrypt). La configuration IA (fournisseur, modèle, clés API) est chiffrée avec cette clé (AES-256-GCM) : un autre compte ne peut ni la lire ni l'utiliser.
+- Changer de mot de passe réencrypte la clé de données. **Mot de passe oublié = clés à ressaisir.**
+- Les comptes de la 1.0.1 reçoivent leur clé à la prochaine connexion ; l'ancienne configuration globale est ignorée.
+- Le premier compte créé est administrateur (bibliothèque, crawler).

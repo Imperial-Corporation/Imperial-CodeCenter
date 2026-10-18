@@ -50,7 +50,10 @@ def test_notice_et_metadonnees():
         project = tomllib.loads(read(f"{name}/pyproject.toml"))["project"]
         assert project["license"]["text"] == about.LICENSE_ID
         assert project["urls"]["Homepage"] == SITE if "urls" in project else True
-    assert tomllib.loads(read("engine/Cargo.toml"))["package"]["license-file"] == "../LICENSE"
+    assert tomllib.loads(read("engine/Cargo.toml"))["package"]["license-file"] == "LICENSE"
+    # maturin refuse un fichier hors du dossier du paquet : l'engine embarque sa propre copie.
+    assert read("engine/LICENSE") == read("LICENSE")
+    assert tomllib.loads(read("engine/Cargo.toml"))["package"]["repository"] == about.REPOSITORY
 
 
 def test_en_tetes_de_licence_presents():

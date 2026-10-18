@@ -14,9 +14,9 @@ def test_niveaux_et_plafonds():
     overview = assess("x", requested="overview")
     focused = assess("x", requested="focused")
     deep = assess("x", requested="deep")
-    assert (overview.level, overview.search_limit, overview.max_attached, overview.tool_cap) == ("overview", 6, 2, 2)
-    assert (focused.level, focused.search_limit, focused.max_attached, focused.tool_cap) == ("focused", None, 5, None)
-    assert (deep.level, deep.search_limit, deep.max_attached, deep.tool_cap) == ("deep", None, 8, None)
+    assert (overview.level, overview.search_limit, overview.max_attached, overview.tool_cap) == ("overview", 8, 3, 3)
+    assert (focused.level, focused.search_limit, focused.max_attached, focused.tool_cap) == ("focused", None, 6, None)
+    assert (deep.level, deep.search_limit, deep.max_attached, deep.tool_cap) == ("deep", None, 10, None)
 
 
 def test_guidance_propre_a_chaque_niveau():
@@ -24,7 +24,7 @@ def test_guidance_propre_a_chaque_niveau():
     assert assess("x", requested="overview").guidance.startswith("MODE APERÇU")
     assert assess("x", requested="focused").guidance.startswith("MODE CIBLÉ")
     assert assess("x", requested="deep").guidance.startswith("MODE APPROFONDI")
-    assert "follow_ups" in GUIDANCE["overview"] and "au plus 2 appels" in GUIDANCE["overview"]
+    assert "follow_ups" in GUIDANCE["overview"] and "au plus 3 appels" in GUIDANCE["overview"]
 
 
 def test_niveau_force_prime_sur_la_question():
@@ -131,9 +131,9 @@ def test_selection_ne_garde_que_le_pertinent():
             {"document_id": "c", "score": 3.0}, {"document_id": "d", "score": 0.5}]
     ids = lambda kept: [h["document_id"] for h in kept]  # noqa: E731
     kept, attach = select_relevant(hits, assess("x", requested="focused"))
-    assert ids(kept) == ["a", "b", "c"] and attach == {"a", "b"}  # d < 25 %, c < 45 % : pas joint
+    assert ids(kept) == ["a", "b", "c"] and attach == {"a", "b", "c"}  # d = 5 % < 15 % : écarté ; c = 30 % : joint
     kept, attach = select_relevant(hits, assess("x", requested="overview"))
-    assert ids(kept) == ["a", "b"] and attach == {"a"}  # b = 50 % < 60 % : montré mais pas joint
+    assert ids(kept) == ["a", "b", "c"] and attach == {"a", "b"}  # c = 30 % < 40 % : montré mais pas joint
     kept, attach = select_relevant(hits, assess("x", requested="deep"))
     assert ids(kept) == ["a", "b", "c"] and attach == {"a", "b", "c"}
 

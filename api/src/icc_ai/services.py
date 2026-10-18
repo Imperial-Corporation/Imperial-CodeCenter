@@ -24,7 +24,7 @@ ROOT = Path(__file__).resolve().parents[3]
 
 @dataclass
 class AIServices:
-    store: ConfigStore
+    store: ConfigStore | None
     engine: EngineGateway
     search: SearchService
     chat: ChatService | None = None
@@ -45,7 +45,9 @@ def data_dir() -> Path:
 def build_services(engine: EngineGateway | None = None) -> AIServices:
     """Construit les services avec la configuration de l'environnement."""
     box = SecretBox.from_environment(ROOT / ".local")
-    store = ConfigStore(data_dir(), box)
+    # La configuration IA (fournisseurs, clés) est propre à chaque compte (voir config/user_store.py) :
+    # il n'y a plus de configuration globale. `box` ne protège plus que le jeton GitHub du crawler.
+    store = None
     engine = engine or RustEngine()
     search = SearchService(store, engine)
     library = Library.from_environment(data_dir())

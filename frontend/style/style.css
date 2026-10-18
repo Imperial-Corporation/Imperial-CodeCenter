@@ -578,14 +578,10 @@ body[data-mode="chat"] .composer-wrap {
     background: linear-gradient(to top, var(--background) 72%, transparent);
 }
 
-body[data-mode="chat"] .topbar { height: 52px; }
 
 body[data-mode="home"] .thread,
 body[data-mode="home"] .chat-head { display: none; }
 
-/* La configuration passe au-dessus de la zone de saisie en mode discussion. */
-body[data-mode="chat"] .settings-fab { bottom: 96px; }
-body[data-mode="chat"] .settings-panel { bottom: 154px; max-height: calc(100vh - 180px); }
 
 /* ============================================================
    Réponse : une carte, des blocs
@@ -1508,13 +1504,146 @@ h6.ai-md-h { font-size: 13.5px; color: var(--muted); text-transform: uppercase; 
     .crawler-panel { right: 16px; bottom: 70px; }
 }
 
-/* Petits écrans : boutons de configuration (après leurs règles de base) */
+
+/* ============================================================
+   Boutons de configuration et panneaux : épurés, hors du chemin
+   ============================================================ */
+
+.topbar { height: 56px; padding-right: 108px; }
+
+.settings-fab {
+    position: fixed;
+    top: 11px;
+    right: 16px;
+    bottom: auto;
+    z-index: 55;
+    width: 34px;
+    height: 34px;
+    border: 1px solid transparent;
+    border-radius: 9px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--muted);
+}
+
+.crawler-fab { right: 56px; }
+
+.settings-fab svg { width: 18px; height: 18px; }
+
+.settings-fab:hover,
+.settings-fab[aria-expanded="true"] {
+    transform: none;
+    border-color: var(--border);
+    background: var(--surface);
+    color: var(--text);
+}
+
+.settings-panel {
+    top: 58px;
+    right: 14px;
+    bottom: auto;
+    z-index: 58;
+    max-height: calc(100vh - 72px);
+    padding: 18px 18px 16px;
+    border-radius: 14px;
+}
+
+.crawler-panel { right: 14px; width: min(440px, calc(100vw - 28px)); }
+
+.sp-head h2 { font-size: 15px; }
+.sp-intro { font-size: 12.5px; margin-bottom: 12px; }
+
+.sp-field input,
+.sp-picker-button { min-height: 36px; padding: 6px 11px; border-radius: 8px; font-size: 13px; }
+
+.sp-field input[type="checkbox"],
+.sp-field input[type="radio"],
+.sp-check input,
+.cp-stop input[type="checkbox"] {
+    width: 15px;
+    height: 15px;
+    min-height: 0;
+    padding: 0;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+}
+
+/* Boutons : discrets par défaut, un seul plein (l'action principale) */
+.sp-actions { gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+
+.sp-button {
+    flex: 0 0 auto;
+    min-height: 0;
+    padding: 7px 13px;
+    border-radius: 8px;
+    border-color: var(--border);
+    color: var(--muted);
+    font-size: 12.5px;
+    font-weight: 600;
+}
+
+.sp-button:hover:not(:disabled) { color: var(--text); border-color: #3b4260; background: var(--surface-hover); }
+
+.sp-primary { border-color: transparent; background: var(--accent); color: #fff; }
+.sp-primary:hover:not(:disabled) { background: var(--accent-hover); color: #fff; border-color: transparent; }
+
+.sp-close { width: 28px; height: 28px; font-size: 18px; }
+
+/* Langues du crawler : pastilles compactes, la case est masquée */
+.cp-langs { gap: 5px; }
+
+.cp-lang {
+    position: relative;
+    padding: 3px 10px;
+    border-radius: 999px;
+    color: var(--muted);
+    font-size: 12px;
+    line-height: 1.6;
+    user-select: none;
+}
+
+.cp-lang input {
+    position: absolute;
+    opacity: 0;
+    width: 1px;
+    height: 1px;
+    margin: 0;
+    pointer-events: none;
+}
+
+.cp-lang:hover { color: var(--text); border-color: #3b4260; }
+.cp-lang:has(input:checked) { color: var(--text); }
+.cp-lang:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.cp-job { padding: 8px 11px; font-size: 12.5px; }
+.cp-stop { gap: 6px; padding: 2px 0; font-size: 12.5px; }
+.cp-stop input[type="number"],
+.cp-stop input[type="datetime-local"] { padding: 4px 8px; font-size: 12.5px; }
+
+/* Retour visible près de l'en-tête de discussion (enregistrement, erreurs) */
+.toast {
+    position: fixed;
+    top: 64px;
+    left: 50%;
+    z-index: 80;
+    max-width: min(520px, calc(100vw - 32px));
+    padding: 10px 16px;
+    transform: translateX(-50%);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    background: #151a26;
+    box-shadow: 0 12px 40px rgb(0 0 0 / 45%);
+    color: var(--text);
+    font-size: 13px;
+    line-height: 1.45;
+}
+
+.toast[data-type="error"] { border-color: rgb(239 68 68 / 55%); color: #f3b4b4; }
+.toast[data-type="success"] { border-color: rgb(34 197 94 / 45%); }
+.toast[hidden] { display: none; }
+
 @media (max-width: 760px) {
-    .settings-fab { right: 14px; bottom: 14px; }
-    .crawler-fab { right: 68px; }
+    .topbar { height: 56px; padding: 0 108px 0 64px; }
     .settings-panel,
-    .crawler-panel { right: 16px; bottom: 70px; }
-    body[data-mode="chat"] .settings-fab { bottom: 106px; }
-    body[data-mode="chat"] .settings-panel,
-    body[data-mode="chat"] .crawler-panel { bottom: 164px; }
+    .crawler-panel { right: 10px; width: calc(100vw - 20px); }
 }

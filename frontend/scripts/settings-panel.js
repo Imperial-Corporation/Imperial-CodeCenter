@@ -132,14 +132,6 @@
         const advancedBox = el("div", "sp-advanced-grid");
         advanced.append(advancedBox);
 
-        const adminInput = el("input");
-        adminInput.type = "password";
-        adminInput.autocomplete = "off";
-        adminInput.value = services.adminToken.get();
-        const adminWrap = field("sp-admin", "Jeton d'administration", adminInput,
-            "Requis par ce serveur pour modifier la configuration. Gardé pour cet onglet seulement.");
-        adminWrap.hidden = true;
-
         const actions = el("div", "sp-actions");
         const testButton = el("button", "sp-button", "Tester la connexion");
         testButton.type = "button";
@@ -157,7 +149,7 @@
         const keyField = field("sp-key", "Clé API", keyInput);
         keyField.append(clearWrap);
 
-        body.append(pickerWrap, urlField, modelField, keyField, notes, advanced, adminWrap, actions, status);
+        body.append(pickerWrap, urlField, modelField, keyField, notes, advanced, actions, status);
         panel.append(head, intro, body);
         document.body.append(fab, panel);
 
@@ -315,15 +307,11 @@
             return payload;
         }
 
-        function applyAdminToken() {
-            services.adminToken.set(adminInput.value.trim());
-        }
-
         function handleError(error) {
             if (error.status === 401) {
-                adminWrap.hidden = false;
-                adminInput.focus();
-                setStatus("Jeton d'administration requis ou invalide.", "error");
+                ICC.auth.expire();
+                closePanel(false);
+                ICC.auth.open("login", "Ta session a expiré : reconnecte-toi pour retrouver tes clés.");
             } else {
                 setStatus(error.message || "Une erreur est survenue.", "error");
             }
@@ -337,7 +325,6 @@
 
             try {
                 if (!catalog) catalog = await services.aiCatalog();
-                applyAdminToken();
                 saved = await services.aiConfig();
                 current = saved.active && catalog.providers.some((p) => p.id === saved.active)
                     ? saved.active
@@ -365,7 +352,6 @@
                 return;
             }
 
-            applyAdminToken();
             setBusy(true);
             setStatus("Test en cours…", "info");
 
@@ -404,7 +390,6 @@
                 return;
             }
 
-            applyAdminToken();
             setBusy(true);
             setStatus("Enregistrement…", "info");
 
@@ -424,17 +409,27 @@
         /* ----- ouverture, fermeture, clavier ----- */
 
         function openPanel() {
+            if (!ICC.auth.user()) {
+                ICC.auth.open("login", "Connecte-toi (ou crée un compte) : tes clés IA sont chiffrées avec ton mot de passe et ne sont utilisables que par toi.");
+                return;
+            }
             panel.hidden = false;
             fab.setAttribute("aria-expanded", "true");
             load().then(() => pickerButton.focus());
         }
 
-        function closePanel() {
+        function closePanel(refocus = true) {
             panel.hidden = true;
             togglePicker(false);
             fab.setAttribute("aria-expanded", "false");
-            fab.focus();
+            if (refocus) fab.focus();
         }
+
+        // Changement de compte : on ne garde rien en mémoire de la configuration de l'autre.
+        ICC.auth.onChange(() => {
+            saved = null;
+            if (!panel.hidden) closePanel(false);
+        });
 
         fab.addEventListener("click", () => (panel.hidden ? openPanel() : closePanel()));
         close.addEventListener("click", closePanel);

@@ -53,6 +53,8 @@ class ChatSession:
     # Renseignés quand la discussion est devenue définitive (voir accounts.py).
     saved_chat_id: str | None = None
     owner_id: str | None = None
+    # Compte qui a ouvert la conversation : seul lui peut la poursuivre ou l'enregistrer.
+    creator_id: str | None = None
 
 
 def answer_to_text(answer: AnswerOut) -> str:
@@ -103,14 +105,23 @@ class ChatService:
 
     # -- tours ------------------------------------------------------------------
 
-    async def search(self, params: SearchParams, depth: str = "auto") -> SearchResponse:
+    def check_owner(self, conversation_id: str, user_id: str | None) -> ChatSession:
+        """La conversation existe et appartient à ce compte (sinon « introuvable », sans rien révéler)."""
+        session = self.get(conversation_id)
+        if session.creator_id != user_id:
+            raise ChatError(
+                "not_found", "Conversation introuvable ou expirée : relance une recherche pour en ouvrir une nouvelle.")
+        return session
+
+    async def search(self, params: SearchParams, depth: str = "auto", *, config=None,
+                     user_id: str | None = None) -> SearchResponse:
         """Première recherche : ouvre une conversation si l'IA a répondu."""
         registry = SourceRegistry()
         conversation_id = new_id()
         response = await self._search.run(params, (), registry=registry, depth=depth,
-                                          conversation_id=conversation_id)
+                                          conversation_id=conversation_id, config=config)
         if response.status == "ok" and response.answer is not None:
-            session = ChatSession(conversation_id, registry)
+            session = ChatSession(conversation_id, registry, creator_id=user_id)
             session.history = [("user", params.query), ("assistant", answer_to_text(response.answer))]
             session.log = [_log_entry(params.query, response)]
             session.turns = 1
@@ -121,7 +132,8 @@ class ChatService:
         return response
 
     async def reply(self, conversation_id: str, message: str, *, depth: str = "auto",
-                    language: str | None = None, category: str | None = None) -> SearchResponse:
+                    language: str | None = None, category: str | None = None, config=None,
+                    user_id: str | None = None) -> SearchResponse:
         """Tour suivant d'une conversation (outils disponibles comme au premier tour)."""
         message = message.strip()
         if not message:
@@ -129,7 +141,7 @@ class ChatService:
         if len(message) > MAX_MESSAGE_CHARS:
             raise ChatError("invalid", f"Message trop long (max {MAX_MESSAGE_CHARS} caractères).")
 
-        session = self.get(conversation_id)
+        session = self.check_owner(conversation_id, user_id)
         if session.turns >= MAX_TURNS:
             raise ChatError("too_long", "Conversation trop longue : lance une nouvelle recherche.")
         if len(session.registry) >= MAX_SOURCES:
@@ -141,7 +153,7 @@ class ChatService:
             params = SearchParams(message, limit=5, language=language, category=category)
             response = await self._search.run(
                 params, tuple(session.history), registry=session.registry, depth=depth,
-                conversation_id=conversation_id,
+                conversation_id=conversation_id, config=config,
             )
             if response.status == "ok" and response.answer is not None:
                 session.history.append(("user", message))
@@ -155,9 +167,9 @@ class ChatService:
 
     # -- discussions enregistrées -------------------------------------------------
 
-    def snapshot(self, conversation_id: str) -> list[dict]:
+    def snapshot(self, conversation_id: str, user_id: str | None = None) -> list[dict]:
         """Tours affichables d'une conversation en cours (pour l'enregistrer)."""
-        session = self.get(conversation_id)
+        session = self.check_owner(conversation_id, user_id)
         return [dict(entry) for entry in session.log]
 
     def mark_saved(self, conversation_id: str, chat_id: str, owner_id: str) -> None:
@@ -207,7 +219,7 @@ class ChatService:
         session.history = history[-2 * MAX_TURNS:]
         session.log = [dict(t) for t in turns][-MAX_TURNS:]
         session.turns = len(turns)
-        session.saved_chat_id, session.owner_id = chat_id, owner_id
+        session.saved_chat_id, session.owner_id, session.creator_id = chat_id, owner_id, owner_id
         self._sessions[conversation_id] = session
         self._purge()
         return conversation_id

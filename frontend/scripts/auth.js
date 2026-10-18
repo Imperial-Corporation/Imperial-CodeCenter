@@ -89,7 +89,7 @@
         };
     }
 
-    function renderSignedOut(mode) {
+    function renderSignedOut(mode, notice) {
         const form = el("form", "auth-form");
         form.noValidate = false;
         const registering = mode === "register";
@@ -101,13 +101,13 @@
             tab.type = "button";
             tab.setAttribute("role", "tab");
             tab.setAttribute("aria-selected", String(id === mode));
-            tab.addEventListener("click", () => render(id));
+            tab.addEventListener("click", () => render(id, notice));
             tabs.append(tab);
         });
 
-        const intro = el("p", "", registering
-            ? "Un pseudo et un mot de passe suffisent. Tes discussions enregistrées te suivent d'un appareil à l'autre."
-            : "Retrouve tes discussions enregistrées.");
+        const intro = el("p", "", notice || (registering
+            ? "Un pseudo et un mot de passe suffisent. Tes clés IA et tes discussions sont liées à ton compte ; tes clés sont chiffrées avec ton mot de passe (mot de passe oublié = clés à ressaisir)."
+            : "Retrouve tes discussions enregistrées et tes clés IA."));
 
         const user = field("Pseudo", "text", "username", "username");
         const pass = field("Mot de passe", "password", "password", registering ? "new-password" : "current-password");
@@ -212,9 +212,9 @@
         return { form, focus: null };
     }
 
-    function render(mode) {
+    function render(mode, notice) {
         const box = ensureDialog();
-        const view = currentUser ? renderSignedIn() : renderSignedOut(mode || "login");
+        const view = currentUser ? renderSignedIn() : renderSignedOut(mode || "login", notice);
         box.replaceChildren(view.form);
         if (!box.open) box.showModal();
         if (view.focus) view.focus.focus();
@@ -224,7 +224,7 @@
         init,
         user: () => currentUser,
         enabled: () => enabled,
-        open: (mode) => render(mode),
+        open: (mode, notice) => render(mode, notice),
         onChange: (fn) => listeners.push(fn),
         /* Session expirée côté serveur : on le reflète sans attendre. */
         expire: () => { if (currentUser) setUser(null); },

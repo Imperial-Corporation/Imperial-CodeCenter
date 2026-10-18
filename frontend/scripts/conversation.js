@@ -63,6 +63,12 @@
                 again.addEventListener("click", retry);
                 row.append(again);
             }
+            if (error.status === 401) {
+                const login = el("button", "ai-action", "Se connecter");
+                login.type = "button";
+                login.addEventListener("click", () => ICC.auth.open("login"));
+                row.append(login);
+            }
             if (code.startsWith("provider_auth") || code.startsWith("provider_not_found") || code === "config") {
                 const open = el("button", "ai-action", "Ouvrir la configuration IA");
                 open.type = "button";
@@ -140,6 +146,10 @@
                     if (first) state.title = "";
                 } else {
                     console.error("Erreur de discussion :", error);
+                    if (error.status === 401) {
+                        ICC.auth.expire();
+                        ICC.auth.open("login", "Connexion requise : connecte-toi ou crée un compte pour poser une question.");
+                    }
                     const retry = () => { turn.remove(); ask(message, options); };
                     const lost = error.code === "chat_not_found";
                     if (lost) {

@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Validation de formulaire</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 24rem; margin: 2rem auto; }
+    label, input, button { display: block; width: 100%; margin-top: .5rem; }
+    .erreur { color: #b00020; min-height: 1.2em; }
+  </style>
+</head>
+<body>
+  <form id="form" novalidate>
+    <label for="email">Adresse e-mail</label>
+    <input id="email" type="email" required>
+    <label for="mdp">Mot de passe (8 caractères minimum)</label>
+    <input id="mdp" type="password" minlength="8" required>
+    <p class="erreur" id="erreur" role="alert"></p>
+    <button type="submit">Envoyer</button>
+  </form>
+  <script>
+    document.getElementById("form").addEventListener("submit", (event) => {
+      event.preventDefault();
+      const erreur = document.getElementById("erreur");
+      const champ = [...event.target.elements].find((el) => el.tagName === "INPUT" && !el.checkValidity());
+      erreur.textContent = champ ? champ.validationMessage : "Formulaire valide.";
+    });
+  </script>
+</body>
+</html>

@@ -1,6 +1,6 @@
 # Licence : Imperial Community License (ICL) 1.0
 
-Texte complet : [`LICENSE`](../LICENSE) (le français fait foi, traduction anglaise incluse). Attribution : [`NOTICE`](../NOTICE). Site officiel : <https://imperial-corporation.pages.dev/icc>.
+Texte complet : [`LICENSE`](../LICENSE) (le français fait foi, traduction anglaise incluse). Attribution : [`NOTICE`](../NOTICE). Site officiel : <https://imperial-corporation.pages.dev/icc>. Dépôt d'origine : <https://github.com/Imperial-Corporation/Imperial-CodeCenter>.
 
 > Ce n'est **pas** une licence « Open Source » au sens de l'OSI (elle interdit l'usage payant). C'est une licence **libre et gratuite** : tout reste public, modifiable et gratuit. Elle est personnalisée : fais-la relire par un juriste avant tout usage à enjeu, et ne la mélange pas avec du code sous des licences incompatibles (GPL, MIT… dont les conditions diffèrent).
 

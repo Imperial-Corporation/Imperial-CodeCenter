@@ -271,6 +271,8 @@ class ProxyMiddleware:
             if message["type"] == "http.response.start":
                 existing = {k.lower() for k, _ in message.get("headers", [])}
                 extra = [(k, v) for k, v in SECURITY_HEADERS.items() if k not in existing]
+                if path.startswith("/api/") and b"cache-control" not in existing:
+                    extra.append((b"cache-control", b"no-store"))  # comptes, clés, discussions : jamais en cache
                 if b"content-security-policy" not in existing and not _csp_exempt(path):
                     extra.append((b"content-security-policy", CSP))
                 if settings.force_https and https and b"strict-transport-security" not in existing:

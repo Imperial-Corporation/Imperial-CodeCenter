@@ -33,6 +33,22 @@ document.addEventListener("DOMContentLoaded", () => {
         message.dataset.type = type;
     }
 
+    /* Retour bien visible (en haut de l'écran) : enregistrement, erreurs… */
+    const toast = document.createElement("div");
+    toast.className = "toast";
+    toast.hidden = true;
+    toast.setAttribute("role", "status");
+    document.body.append(toast);
+    let toastTimer = null;
+
+    function notify(text, type = "info") {
+        window.clearTimeout(toastTimer);
+        toast.textContent = text;
+        toast.dataset.type = type;
+        toast.hidden = false;
+        toastTimer = window.setTimeout(() => { toast.hidden = true; }, type === "error" ? 7000 : 3500);
+    }
+
     /* --------------------------------------------------
        Client HTTP minimal (statut du système)
     -------------------------------------------------- */
@@ -199,7 +215,7 @@ document.addEventListener("DOMContentLoaded", () => {
         chatState.dataset.saved = String(saved);
         chatState.textContent = saved ? "Enregistrée" : "Temporaire";
         saveButton.hidden = saved;
-        saveButton.disabled = state.busy || !state.id;
+        saveButton.disabled = false;  // jamais inerte : un clic explique toujours ce qui manque
 
         sendButton.disabled = state.busy;
         sendButton.textContent = state.busy ? "En cours…" : (inChat ? "Envoyer" : "Chercher");
@@ -220,6 +236,10 @@ document.addEventListener("DOMContentLoaded", () => {
             return;
         }
         if (conversation.state().busy) return;
+        if (!ICC.auth.user()) {
+            ICC.auth.open("login", "Connexion requise : crée un compte ou connecte-toi pour poser une question. Ton texte est conservé.");
+            return;
+        }
         showMessage("");
         input.value = "";
         autoGrow();
@@ -260,23 +280,44 @@ document.addEventListener("DOMContentLoaded", () => {
 
     saveButton.addEventListener("click", async () => {
         const state = conversation.state();
-        if (!state.id || state.savedId) return;
+        if (state.savedId) {
+            notify("Cette discussion est déjà enregistrée.");
+            return;
+        }
+        if (state.busy) {
+            notify("Attends la fin de la réponse avant d'enregistrer.");
+            return;
+        }
+        if (!state.id) {
+            notify("Rien à enregistrer pour l'instant : la discussion n'a pas encore de réponse.", "error");
+            return;
+        }
         if (!ICC.auth.user()) {
-            showMessage("Connecte-toi pour enregistrer cette discussion.");
-            ICC.auth.open("login");
+            notify("Connecte-toi pour enregistrer cette discussion.");
+            ICC.auth.open("login", "Connecte-toi (ou crée un compte) pour enregistrer cette discussion : elle te suivra d'un appareil à l'autre.");
             return;
         }
         saveButton.disabled = true;
+        saveButton.textContent = "Enregistrement…";
         try {
             const saved = await ICC.services.saveChat(state.id, state.title);
             conversation.markSaved(saved.id, saved.title);
             await sidebar.refresh();
             sidebar.setActive(saved.id);
-            showMessage("Discussion enregistrée : la suite s'y ajoutera automatiquement.", "success");
+            notify("Discussion enregistrée : elle est dans la barre de gauche, la suite s'y ajoutera.", "success");
         } catch (error) {
-            if (error.status === 401) ICC.auth.expire();
-            showMessage(error.message || "Enregistrement impossible.", "error");
-            saveButton.disabled = false;
+            console.error("Enregistrement impossible :", error);
+            if (error.status === 401) {
+                ICC.auth.expire();
+                ICC.auth.open("login", "Ta session a expiré : reconnecte-toi puis enregistre à nouveau.");
+            } else if (error.code === "chat_not_found") {
+                notify("Cette discussion n'est plus en mémoire sur le serveur (redémarrage ou expiration) : elle ne peut plus être enregistrée.", "error");
+            } else {
+                notify(error.message || "Enregistrement impossible.", "error");
+            }
+        } finally {
+            saveButton.textContent = "Enregistrer";
+            refreshHeader(conversation.state());
         }
     });
 
@@ -305,6 +346,7 @@ document.addEventListener("DOMContentLoaded", () => {
 
     refreshHeader(conversation.state());
     ICC.auth.init();
+    ICC.notify = notify;
     checkSystemStatus();
     input.focus();
 });

@@ -12,7 +12,8 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from conftest import FakeEngine, FakeProvider, turn
-from icc_ai import admin_api, api
+from icc_ai import accounts_api, admin_api, api
+from icc_ai.accounts import AccountStore
 from icc_ai.crawl_jobs import CrawlManager
 from icc_ai.library import Library, Limits
 from icc_ai.service import SearchService
@@ -32,14 +33,22 @@ def app(tmp_path, store, secret_box):
     application = FastAPI()
     application.include_router(api.router)
     application.include_router(admin_api.router)
-    application.state.ai = AIServices(store, engine, service, library=library, crawler=crawler)
+    application.include_router(accounts_api.router)
+    accounts = AccountStore(tmp_path / "accounts.db")
+    application.state.ai = AIServices(store, engine, service, library=library, crawler=crawler, accounts=accounts)
     application.state.root = root
     return application
 
 
+def register(client, name):
+    assert client.post("/api/v1/auth/register", json={"username": name, "password": "motdepasse-ok"}).status_code == 200
+    return client
+
+
 @pytest.fixture
 def client(app):
-    return TestClient(app)
+    """Client connecté en administrateur (le premier compte créé)."""
+    return register(TestClient(app), "admin_t")
 
 
 def test_info_bibliotheque(client):
@@ -125,10 +134,31 @@ def test_jeton_github_jamais_renvoye(client):
 
 def test_protection_jeton_admin(client, monkeypatch):
     monkeypatch.setenv("CODECENTER_ADMIN_TOKEN", "secret-admin")
-    assert client.get("/api/v1/crawler").status_code == 401
-    assert client.get("/api/v1/crawler", headers={"Authorization": "Bearer faux"}).status_code == 401
-    assert client.get("/api/v1/crawler", headers={"Authorization": "Bearer secret-admin"}).status_code == 200
-    assert client.post("/api/v1/library/depot/scan").status_code == 401
+    visitor = TestClient(client.app)  # sans session : seul le jeton ouvre
+    assert visitor.get("/api/v1/crawler").status_code == 401
+    assert visitor.get("/api/v1/crawler", headers={"Authorization": "Bearer faux"}).status_code == 401
+    assert visitor.get("/api/v1/crawler", headers={"Authorization": "Bearer secret-admin"}).status_code == 200
+    assert visitor.post("/api/v1/library/depot/scan").status_code == 401
+
+
+def test_admin_est_le_premier_compte(app, monkeypatch):
+    monkeypatch.delenv("CODECENTER_ADMIN_TOKEN", raising=False)
+    visitor = TestClient(app)
+    assert visitor.get("/api/v1/crawler").status_code == 401
+    first = register(TestClient(app), "premier")
+    second = register(TestClient(app), "deuxieme")
+    assert first.get("/api/v1/crawler").status_code == 200
+    denied = second.get("/api/v1/crawler")
+    assert denied.status_code == 403 and "administrateur" in denied.json()["detail"]
+    assert second.post("/api/v1/library/depot/scan").status_code == 403
+
+
+def test_jeton_admin_ouvre_sans_compte(app, monkeypatch):
+    monkeypatch.setenv("CODECENTER_ADMIN_TOKEN", "secret-admin")
+    register(TestClient(app), "premier")
+    other = register(TestClient(app), "deuxieme")
+    assert other.get("/api/v1/crawler").status_code == 403
+    assert TestClient(app).get("/api/v1/crawler", headers={"Authorization": "Bearer secret-admin"}).status_code == 200
 
 
 def test_requete_inter_sites_refusee(client):
@@ -136,12 +166,13 @@ def test_requete_inter_sites_refusee(client):
     assert response.status_code == 403
 
 
-def test_services_absents_503(tmp_path, store):
+def test_services_absents_503(tmp_path, store, monkeypatch):
+    monkeypatch.setenv("CODECENTER_ADMIN_TOKEN", "t")
     engine = FakeEngine()
     service = SearchService(store, engine, provider_factory=lambda r, t=None: None)
     application = FastAPI()
     application.include_router(admin_api.router)
     application.state.ai = AIServices(store, engine, service)
-    bare = TestClient(application)
+    bare = TestClient(application, headers={"Authorization": "Bearer t"})
     assert bare.get("/api/v1/library/info").status_code == 503
     assert bare.get("/api/v1/crawler").status_code == 503

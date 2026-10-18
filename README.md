@@ -1,10 +1,10 @@
 # Imperial CodeCenter
 
-**Version 1.0.1** — Moteur de recherche de code et de documentation, assisté par IA.
+**Version 1.0.2** — Moteur de recherche de code et de documentation, assisté par IA.
 
 Développeur en chef : **yolezz** · Organisation : **Imperial** · Idée originale : **HyperDemoned**
 
-Basé sur **Imperial CodeCenter**, créé par **Imperial** — <https://imperial-corporation.pages.dev/icc> · Licence : [Imperial Community License 1.0](LICENSE) (libre et gratuite, code ouvert obligatoire, usage payant interdit).
+Basé sur **Imperial CodeCenter**, créé par **Imperial** — <https://imperial-corporation.pages.dev/icc> · Dépôt : <https://github.com/Imperial-Corporation/Imperial-CodeCenter> · Licence : [Imperial Community License 1.0](LICENSE) (libre et gratuite, code ouvert obligatoire, usage payant interdit).
 
 Documentation détaillée : [`docs/`](docs/README.md).
 
@@ -28,7 +28,7 @@ frontend/ (HTML/CSS/JS)  ──HTTP──▶  api/ (FastAPI + Python)  ──PyO
 | `frontend/` | Interface : accueil, discussion, barre latérale (comptes, discussions enregistrées), panneaux de configuration IA et crawler. |
 | `config/` | Migrations SQL, `.env`, service systemd, paramètres de déploiement. |
 | `crawler/` | Collecteur GitHub (`icc_crawler`) : licences permissives, planification, objectifs d'arrêt, sécurité disque. |
-| `examples/` | 35 scripts d'exemple installés au premier déploiement. |
+| `examples/` | 66 scripts d'exemple installés au premier déploiement. |
 | `docs/` | Documentation complète en français. |
 | `scripts/` | `install.sh` (tout en un), `build.sh`, `deploy.sh`, `release.sh`, `fix_permissions.sh`, `doctor.sh`, `setup_proxy.sh`, `update_cloudflare_ips.sh`, `install_examples.sh`, `clean.sh`. |
 
@@ -104,24 +104,26 @@ Les variables principales sont ci-dessous ; la liste complète (import, indexati
 | `DATABASE_URL` | Connexion PostgreSQL (obligatoire). |
 | `CODECENTER_WATCH_PATHS` | Dossiers surveillés et seuls lisibles (séparés par `:`). |
 | `CODECENTER_DATA_DIR` | Données de l'application ; la configuration IA est dans `<dir>/ai/providers.json`. Par défaut `.local/data`. |
-| `CODECENTER_SECRET_KEY` | Clé Fernet de chiffrement des clés API (production). |
+| `CODECENTER_SECRET_KEY` | Clé de chiffrement des données serveur (production) ; les clés API des comptes sont, elles, chiffrées par mot de passe. |
 | `CODECENTER_SECRET_KEY_FILE` | Alternative : chemin d'un fichier contenant la clé. |
 | `CODECENTER_KEY_DIR` | Développement seulement : dossier où une clé est générée si aucune n'est définie (par défaut `.local/`, ignoré par git). |
 | `CODECENTER_REGISTRATION` | `open` (défaut) ou `closed` : inscriptions de comptes. |
-| `CODECENTER_ADMIN_TOKEN` | Facultatif : si défini, la lecture et la modification de la configuration IA exigent `Authorization: Bearer <jeton>`. |
+| `CODECENTER_ADMIN_TOKEN` | Facultatif : jeton d'administration (`Authorization: Bearer`) pour bibliothèque, crawler et santé de l'index ; sinon le premier compte créé est administrateur. |
+| `CODECENTER_USER_RATE` | Requêtes par minute et par utilisateur (30 par défaut). |
+| `CODECENTER_PROVIDER_NETWORK` | `any` (défaut) ou `public` : refuse les URL de fournisseur vers le réseau local. |
 
 Générer une clé : `python3 -c "import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())"`
 
 ## Configuration de l'IA
 
-Le bouton à engrenage (en bas à droite) ouvre le panneau :
+Le bouton à engrenage (dans la barre supérieure) ouvre le panneau :
 
 - **Fournisseur** (18) : Ollama, OmniRoute, LM Studio, llama.cpp / vLLM (locaux) ; Claude, OpenAI, Groq, Gemini, OpenRouter, Mistral, DeepSeek, xAI, Together AI, Fireworks AI, Cerebras, NVIDIA NIM, Cohere (distants) ; « compatible OpenAI » pour toute autre URL `/v1`.
 - **URL, modèle, clé API** propres au fournisseur ; la clé enregistrée n'est jamais renvoyée au navigateur (le champ reste vide, laisser vide conserve la clé).
 - **Advanced features** : délai d'attente, tokens de sortie, fenêtre de contexte, température, nombre maximal d'appels d'outils.
 - **Tester la connexion** (liste aussi les modèles disponibles) et **Enregistrer et activer**.
 
-La configuration est **globale à l'instance** : un seul fournisseur et un seul modèle actifs pour tous les utilisateurs. Les réglages des autres fournisseurs sont conservés quand on change.
+La configuration est **propre à chaque compte** et chiffrée avec une clé protégée par ton mot de passe : personne d'autre (administrateur compris) ne peut lire ni utiliser tes clés. Il faut un compte pour utiliser l'IA. Mot de passe oublié = clés à ressaisir. Les réglages des autres fournisseurs sont conservés quand on change.
 
 Particularités gérées par les connecteurs : système séparé et blocs `tool_use`/`tool_result` (Claude) ; arguments d'outils en chaîne JSON, `max_completion_tokens` vs `max_tokens` (OpenAI-compatibles) ; schémas OpenAPI restreints, `functionCall` sans identifiant, clé en en-tête (Gemini) ; arguments objets, `num_ctx`, modèle sans outils (Ollama, repli automatique sans outils).
 
@@ -191,40 +193,20 @@ Les identifiants inventés par le modèle sont retirés avec un avertissement. `
 
 ## Sécurité
 
-- Clés API chiffrées au repos (Fernet), clé maître séparée (`/etc/...`, root, 0600), `providers.json` en 0600 dans un dossier 0700 ; aucun secret dans les réponses HTTP, les logs ni les messages d'erreur.
-- Les routes de configuration refusent les requêtes inter-sites (en-tête `Origin`) ; `CODECENTER_ADMIN_TOKEN` ajoute une authentification. Les comptes (facultatifs) protègent les discussions enregistrées mais **pas** ces routes d'administration : sans ce jeton, toute personne qui atteint le serveur peut changer le fournisseur actif. Garde le service sur `127.0.0.1` derrière un reverse proxy authentifié, ou définis le jeton.
-- L'URL d'un fournisseur est choisie par l'administrateur : elle est restreinte à `http(s)` sans identifiants, mais pas à une liste de machines (nécessaire pour Ollama/OmniRoute locaux).
-- Le contenu des fichiers est traité comme donnée dans le prompt (le modèle est averti d'ignorer d'éventuelles instructions) ; cela réduit le risque d'injection mais ne l'élimine pas.
-
-## Tests
-
-```bash
-cd api && uv sync && uv run pytest                  # 614 tests Python (4 d'intégration ignorés sans base)
-cd engine && cargo test                              # 23 tests Rust
-```
-
-Test d'intégration réel (moteur Rust + PostgreSQL + watcher), sur une base de **test** (la table `code_examples` est vidée) :
-
-```bash
-cd engine && uv run --with maturin maturin develop --manifest-path Cargo.toml --python ../api/.venv/bin/python
-cd ../api && ICC_TEST_DATABASE_URL=postgresql://user@127.0.0.1:5432/base_test uv run pytest tests/test_integration_engine.py
-```
-
-Les fournisseurs distants sont simulés avec `httpx.MockTransport` : aucun test n'appelle un vrai service.
-
-## Limitations connues
-
-- La recherche Rust est lexicale (termes, titre, chemin, catégories, contenu) avec plafonds (5 000 candidats, 3 000 fichiers, 96 Mio lus par requête) ; il n'y a pas de recherche vectorielle. Au-delà, `truncated` est signalé.
+- Clés API **liées au compte** : clé de données aléatoire par utilisateur, protégée par le mot de passe (scrypt) et, pour la session en cours, par le jeton de session ; AES-256-GCM lié à l'identifiant du compte. Aucun secret dans les réponses HTTP, les logs ni les erreurs. Sans compte, pas d'IA ; un compte ne peut pas utiliser les clés d'un autre.
+- Connexion obligatoire pour chercher, discuter et configurer ; discussions rattachées à leur créateur ; limites par utilisateur et par IP ; `no-store` sur l'API ; contrôle d'origine sur les routes qui modifient.
+- Garde SSRF sur les URL de fournisseur : `http(s)` sans identifiants ; `CODECENTER_PROVIDER_NETWORK=public` interdit en plus le réseau local (laisse `any` pour Ollama/OmniRoute locaux).
 - L'analyse de code hors Python repose sur des motifs : approximative pour du code atypique (repli automatique).
 - Les noms de modèles par défaut sont des suggestions : saisis un modèle disponible sur ton compte (le test de connexion les liste).
 - Le tool-calling dépend du modèle ; sans support, la réponse se fonde sur les fichiers joints.
 - Les conversations non enregistrées sont gardées **en mémoire** (2 h, 200 max) et perdues au redémarrage ; les discussions enregistrées sont conservées dans le compte.
 - Le crawler a été testé avec des réponses GitHub simulées, pas contre le vrai GitHub ; la configuration nginx a été validée par `nginx -t` (IPv6 désactivé dans le bac à sable), pas avec un vrai domaine Cloudflare.
-- Les routes d'administration (configuration IA, crawler) ne dépendent pas des comptes : protège l'instance avec `CODECENTER_ADMIN_TOKEN` et/ou le proxy.
+- Administration (bibliothèque, crawler) : premier compte créé ou `CODECENTER_ADMIN_TOKEN`. Crée donc ton compte en premier sur une nouvelle instance.
+- Le chiffrement des clés dépend du mot de passe : en cas d'oubli, elles sont irrécupérables (volontairement).
 - L'installation automatique de rustup et de cloudflared n'a pas pu être testée en ligne dans le bac à sable.
 
 ## Licence et origine
 
-Imperial CodeCenter est distribué sous l'**Imperial Community License 1.0** ([LICENSE](LICENSE), [NOTICE](NOTICE), [résumé](docs/licence.md)) : utilisation et modification libres et gratuites ; tout programme qui l'utilise doit rester public et gratuit, sous la même licence ; l'usage dans un projet payant est interdit ; l'origine (**Imperial**, <https://imperial-corporation.pages.dev/icc>) doit rester visible. Ce n'est pas une licence reconnue par l'OSI et elle devrait être relue par un juriste avant tout usage à enjeu.
+Imperial CodeCenter est distribué sous l'**Imperial Community License 1.0** ([LICENSE](LICENSE), [NOTICE](NOTICE), [résumé](docs/licence.md)) : utilisation et modification libres et gratuites ; tout programme qui l'utilise doit rester public et gratuit, sous la même licence ; l'usage dans un projet payant est interdit ; l'origine (**Imperial**, <https://imperial-corporation.pages.dev/icc>, dépôt <https://github.com/Imperial-Corporation/Imperial-CodeCenter>) doit rester visible. Ce n'est pas une licence reconnue par l'OSI et elle devrait être relue par un juriste avant tout usage à enjeu.
 
 Développeur en chef : **yolezz** · Organisation : **Imperial** · Idée originale : **HyperDemoned**

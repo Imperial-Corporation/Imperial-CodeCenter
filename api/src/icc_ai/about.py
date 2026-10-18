@@ -6,9 +6,10 @@
 from __future__ import annotations
 
 NAME = "Imperial CodeCenter"
-VERSION = "1.0.1"
+VERSION = "1.0.2"
 ORGANIZATION = "Imperial"
 WEBSITE = "https://imperial-corporation.pages.dev/icc"
+REPOSITORY = "https://github.com/Imperial-Corporation/Imperial-CodeCenter"
 LICENSE_NAME = "Imperial Community License 1.0"
 LICENSE_ID = "LicenseRef-Imperial-Community-1.0"
 CREDITS = {
@@ -25,6 +26,7 @@ def about() -> dict:
         "version": VERSION,
         "organization": ORGANIZATION,
         "website": WEBSITE,
+        "repository": REPOSITORY,
         "license": {"name": LICENSE_NAME, "id": LICENSE_ID},
         "credits": CREDITS,
         "attribution": ATTRIBUTION,

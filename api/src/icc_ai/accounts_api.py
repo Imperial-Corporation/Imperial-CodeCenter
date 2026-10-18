@@ -5,7 +5,7 @@
 
 Cookie de session `icc_session` : HttpOnly, SameSite=Lax, Secure derrière
 HTTPS. Les requêtes qui modifient l'état refusent un en-tête Origin étranger.
-Un visiteur sans compte peut tout utiliser, sauf enregistrer une discussion.
+La recherche, le chat et la configuration IA exigent un compte (clés chiffrées par compte).
 """
 
 from __future__ import annotations
@@ -19,11 +19,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .accounts import SESSION_TTL_S, AccountError, AccountStore
-from .api import Services, check_origin
+from .api import COOKIE_NAME, Services, User, check_origin, require_user, user_from_request
 from .errors import ChatError
 from .services import AIServices
-
-COOKIE_NAME = "icc_session"
 
 router = APIRouter(prefix="/api/v1", dependencies=[Depends(check_origin)])
 
@@ -32,22 +30,6 @@ def _store(services: AIServices) -> AccountStore:
     if services.accounts is None:
         raise HTTPException(503, "Les comptes ne sont pas disponibles sur cette instance.")
     return services.accounts
-
-
-def user_from_request(request: Request, services: AIServices) -> dict | None:
-    if services.accounts is None:
-        return None
-    return services.accounts.user_for_token(request.cookies.get(COOKIE_NAME))
-
-
-def require_user(request: Request, services: Services) -> dict:
-    user = user_from_request(request, services)
-    if user is None:
-        raise HTTPException(401, "Connexion requise.")
-    return user
-
-
-User = Annotated[dict, Depends(require_user)]
 
 
 def _secure(request: Request) -> bool:
@@ -102,10 +84,10 @@ def me(request: Request, services: Services):
 async def register(body: Credentials, request: Request, response: Response, services: Services):
     store = _store(services)
     try:
-        user = await asyncio.to_thread(store.register, body.username, body.password)
+        user = await asyncio.to_thread(store.register, body.username, body.password, _client_ip(request))
     except AccountError as exc:
         return _fail(exc)
-    _set_cookie(response, request, store.create_session(user["id"]))
+    _set_cookie(response, request, store.create_session(user["id"], user["dek"]))
     return {"user": {"username": user["username"]}}
 
 
@@ -116,7 +98,7 @@ async def login(body: Credentials, request: Request, response: Response, service
         user = await asyncio.to_thread(store.authenticate, body.username, body.password, _client_ip(request))
     except AccountError as exc:
         return _fail(exc)
-    _set_cookie(response, request, store.create_session(user["id"]))
+    _set_cookie(response, request, store.create_session(user["id"], user["dek"]))
     return {"user": {"username": user["username"]}}
 
 
@@ -171,7 +153,7 @@ def save_chat(body: SaveChat, user: User, services: Services):
     """Rend définitive la discussion en cours ; la suite s'y ajoute automatiquement."""
     chat = services.chat
     try:
-        turns = chat.snapshot(body.conversation_id)
+        turns = chat.snapshot(body.conversation_id, user["id"])
         if chat.saved_target(body.conversation_id):
             return _fail(AccountError("already_saved", "Cette discussion est déjà enregistrée.", 409))
         title = body.title or (turns[0]["question"] if turns else "Discussion")

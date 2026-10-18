@@ -1,4 +1,4 @@
-# Référence de l'API (v1.0.1)
+# Référence de l'API (v1.0.2)
 
 Documentation interactive : `/docs`. Erreurs : `{"detail": "...", "code": "..."}`.
 

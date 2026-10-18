@@ -252,7 +252,7 @@ def test_contexte_petit_bloque_les_outils_quand_plein(store):
     provider = FakeProvider([
         turn("", [tool_call("list_filters", {})]), turn("", [tool_call("list_filters", {}, "c2")]), turn(ANSWER)])
     service, _, _ = make_service(store, provider, engine=Wide(),
-                                 advanced={"context_window": 4200, "max_output_tokens": 64})
+                                 advanced={"context_window": 4500, "max_output_tokens": 64})
     response = search(service)
     assert response.status == "ok"
     assert any(not c["allow_tools"] for c in provider.calls)

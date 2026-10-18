@@ -1,0 +1,24 @@
+/* Thème clair/sombre avec variables CSS et préférence système. */
+:root {
+  --fond: #ffffff;
+  --texte: #1a1a1a;
+  --accent: #0b5fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --fond: #121212;
+    --texte: #eeeeee;
+    --accent: #7aa7ff;
+  }
+}
+
+body {
+  background: var(--fond);
+  color: var(--texte);
+  transition: background 0.2s, color 0.2s;
+}
+
+a {
+  color: var(--accent);
+}

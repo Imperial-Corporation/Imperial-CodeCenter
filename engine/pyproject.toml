@@ -7,7 +7,7 @@ build-backend = "maturin"
 
 [project]
 name = "codecenter-engine"
-version = "1.0.1"
+version = "1.0.2"
 requires-python = ">=3.10"
 description = "Moteur d'indexation et de recherche d'Imperial CodeCenter"
 authors = [{ name = "Imperial" }]
@@ -15,6 +15,7 @@ license = { text = "LicenseRef-Imperial-Community-1.0" }
 
 [project.urls]
 Homepage = "https://imperial-corporation.pages.dev/icc"
+Repository = "https://github.com/Imperial-Corporation/Imperial-CodeCenter"
 
 [tool.maturin]
 features = ["pyo3/extension-module"]

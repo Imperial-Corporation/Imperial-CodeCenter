@@ -409,16 +409,16 @@ def read_calls(engine):
 
 
 def test_overview_limite_recherche_fichiers_et_outils(build):
-    three_tools = turn("", [tool_call("search_code", {"query": "json"}, f"c{i}") for i in range(3)])
+    three_tools = turn("", [tool_call("search_code", {"query": "json"}, f"c{i}") for i in range(4)])
     provider = FakeProvider([three_tools, turn(answer(used=[]))])
     chat, engine = build(provider, engine=FakeEngine(many_documents()))
     response = search(chat, "comment lire un fichier json", limit=10)
     assert response.meta.depth == "overview"
-    assert search_calls(engine)[0][2] == 6  # plafond de recherche
-    assert len(read_calls(engine)) == 2  # fichiers joints d'emblée
-    assert response.meta.tool_calls == 2  # plafond d'outils
+    assert search_calls(engine)[0][2] == 8  # plafond de recherche
+    assert len(read_calls(engine)) == 3  # fichiers joints d'emblée
+    assert response.meta.tool_calls == 3  # plafond d'outils
     tool_messages = [m for m in provider.calls[1]["messages"] if m.role == "tool"]
-    assert len(tool_messages) == 3 and "limite d'appels d'outils atteinte" in tool_messages[2].content
+    assert len(tool_messages) == 4 and "limite d'appels d'outils atteinte" in tool_messages[3].content
     assert provider.calls[0]["messages"][0].content.endswith(GUIDANCE["overview"])
 
 
@@ -429,7 +429,7 @@ def test_deep_ne_limite_pas(build):
     response = search(chat, "comment lire un fichier json", depth="deep", limit=10)
     assert response.meta.depth == "deep"
     assert search_calls(engine)[0][2] == 10
-    assert len(read_calls(engine)) == 8
+    assert len(read_calls(engine)) == 10
     assert response.meta.tool_calls == 3
     assert provider.calls[0]["messages"][0].content.endswith(GUIDANCE["deep"])
 
@@ -437,7 +437,7 @@ def test_deep_ne_limite_pas(build):
 def test_focused_plafond_de_fichiers_joints(build):
     chat, engine = build(FakeProvider([turn(answer(used=[]))]), engine=FakeEngine(many_documents()))
     response = search(chat, "json dumps() utiliser", limit=10)
-    assert response.meta.depth == "focused" and len(read_calls(engine)) == 5
+    assert response.meta.depth == "focused" and len(read_calls(engine)) == 6
     assert search_calls(engine)[0][2] == 10
 
 
@@ -477,7 +477,7 @@ def test_overview_en_conversation_limite_les_outils(build):
     chat, _ = build(provider, engine=FakeEngine(many_documents()))
     cid = search(chat, "comment lire un fichier json").meta.conversation_id
     second = reply(chat, cid, "json", depth="overview")
-    assert second.meta.tool_calls == 2
+    assert second.meta.tool_calls == 3
 
 
 # --------------------------------------------------------------------------

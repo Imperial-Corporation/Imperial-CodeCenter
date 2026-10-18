@@ -60,7 +60,7 @@ Règles :
 - Un bloc marqué EXTRAIT PARTIEL, PLAN ou RÉFÉRENCE n'est pas le fichier intégral : utilise read_file pour lire le code manquant avant d'affirmer quoi que ce soit à son sujet.
 - Pour montrer du code d'une source, recopie-le fidèlement et indique ses source_ids. Du code que tu écris toi-même n'a pas de source_ids.
 - Réponds dans la langue de la question.
-- Sois sobre : n'utilise un outil que si les sources jointes ne suffisent pas, ne cite que les sources réellement utiles (used_sources) et ne recopie que le code nécessaire.
+- Exploite toutes tes ressources : lis les fichiers avec read_file au lieu de deviner, relance search_code avec d'autres mots-clés quand les sources ne couvrent pas la question, consulte plusieurs sources et croise-les. Reste ensuite concis : ne cite (used_sources) que les sources réellement utiles et ne recopie que le code nécessaire.
 - Commence par répondre à ce qui est demandé, simplement. N'ajoute pas de sujets annexes non demandés (sécurité, chiffrement, authentification, déploiement…) : propose-les plutôt dans `follow_ups`.
 - Les textes (summary, body) acceptent un Markdown simple : **gras**, *italique*, listes, `code inline`, sous-titres ###, tableaux. Pas de HTML. Le code multi-lignes va uniquement dans `code_blocks`.
 
@@ -144,6 +144,7 @@ class SearchService:
     async def run(
         self, params: SearchParams, history: Sequence[tuple[str, str]] = (), *,
         registry: SourceRegistry | None = None, depth: str = "auto", conversation_id: str = "",
+        config=None,
     ) -> SearchResponse:
         """Exécute le pipeline.
 
@@ -152,7 +153,9 @@ class SearchService:
         (voir `depth.py`), « auto » le déduit de la question et de l'historique.
         """
         started = time.perf_counter()
-        runtime = self._store.active_runtime()  # ConfigError possible : remontée telle quelle
+        # `config` : configuration du compte (clés par compte) ; sinon le magasin global (tests, scripts).
+        source = config if config is not None else self._store
+        runtime = source.active_runtime() if source is not None else None  # ConfigError possible
 
         warnings: list[str] = []
         registry = registry if registry is not None else SourceRegistry()

@@ -331,9 +331,11 @@
         }
 
         function handleError(error) {
-            if (error.status === 401) {
+            if (error.status === 401 || error.status === 403) {
                 adminField.hidden = false;
-                setMessage("Jeton d'administration requis ou invalide.", "error");
+                setMessage(error.status === 403
+                    ? "Réservé à l'administrateur de l'instance (le premier compte créé), ou saisis le jeton d'administration."
+                    : "Connecte-toi avec le compte administrateur (le premier compte créé) ou saisis le jeton d'administration.", "error");
             } else {
                 setMessage(error.message || "Erreur inattendue.", "error");
             }
@@ -435,6 +437,10 @@
         /* ----- ouverture / fermeture ----- */
 
         function openPanel() {
+            if (!ICC.auth.user() && !services.adminToken.get()) {
+                ICC.auth.open("login", "Le crawler est réservé à l'administrateur : connecte-toi avec le premier compte créé sur cette instance.");
+                return;
+            }
             // Un seul panneau flottant à la fois.
             const other = document.getElementById("settings-panel");
             if (other && !other.hidden) document.querySelector(".settings-fab:not(.crawler-fab)").click();

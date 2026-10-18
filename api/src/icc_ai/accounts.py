@@ -8,6 +8,14 @@
 * Session : un jeton aléatoire de 256 bits est envoyé dans un cookie
   `HttpOnly`/`SameSite=Lax` ; la base ne conserve que son empreinte SHA-256
   (une fuite de la base ne permet donc pas de se connecter).
+* Clés et configuration IA **par compte**, chiffrées avec le mot de passe :
+  chaque compte a une clé de données aléatoire (DEK) ; elle est « enveloppée »
+  (AES-256-GCM) par une clé dérivée du mot de passe (scrypt) et, pour la durée
+  d'une session, par une clé dérivée du jeton de session (HKDF). La base seule
+  ne permet donc jamais de lire la configuration d'un compte : il faut son mot
+  de passe, ou le cookie de session ouvert. Mot de passe oublié = clés perdues
+  (à ressaisir) ; elles ne sont lisibles par aucun autre compte, ni par
+  l'administrateur.
 * Discussions « définitives » : une discussion de l'IA est temporaire (en
   mémoire) tant que l'utilisateur ne l'a pas enregistrée ; une fois
   enregistrée, elle est conservée dans la base du compte.
@@ -32,6 +40,11 @@ import uuid
 from contextlib import contextmanager
 from pathlib import Path
 
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
+
 USERNAME_RE = re.compile(r"^[A-Za-z0-9_.-]{3,32}$")
 PASSWORD_MIN = 8
 PASSWORD_MAX = 128
@@ -46,6 +59,9 @@ _SCRYPT_N, _SCRYPT_R, _SCRYPT_P, _KEY_LEN = 2**14, 8, 1, 32
 MAX_FAILURES = 5
 FAILURE_WINDOW_S = 15 * 60
 MAX_FAILURES_PER_IP = 30
+# Créations de compte : 10 par heure et par IP.
+MAX_REGISTRATIONS_PER_IP = 10
+REGISTER_WINDOW_S = 3600
 
 
 class AccountError(Exception):
@@ -111,6 +127,42 @@ def _token_hash(token: str) -> str:
 
 
 # --------------------------------------------------------------------------
+# Clé de données (DEK) : enveloppée par le mot de passe et par la session
+# --------------------------------------------------------------------------
+
+def _seal(key: bytes, plaintext: bytes, aad: bytes) -> str:
+    nonce = os.urandom(12)
+    return base64.b64encode(nonce + AESGCM(key).encrypt(nonce, plaintext, aad)).decode()
+
+
+def _unseal(key: bytes, blob: str, aad: bytes) -> bytes:
+    raw = base64.b64decode(blob)
+    try:
+        return AESGCM(key).decrypt(raw[:12], raw[12:], aad)
+    except InvalidTag:
+        raise AccountError("locked", "Données chiffrées illisibles : reconnecte-toi.", 401) from None
+
+
+def _kek(password: str, salt: bytes) -> bytes:
+    return hashlib.scrypt(password.encode("utf-8"), salt=salt, n=_SCRYPT_N, r=_SCRYPT_R, p=_SCRYPT_P,
+                          dklen=32, maxmem=128 * 1024 * 1024)
+
+
+def _session_key(token: str) -> bytes:
+    return HKDF(algorithm=hashes.SHA256(), length=32, salt=None, info=b"icc-session-dek-v1").derive(
+        token.encode("utf-8"))
+
+
+def _wrap_for_password(user_id: str, password: str, dek: bytes) -> tuple[str, str]:
+    salt = os.urandom(16)
+    return base64.b64encode(salt).decode(), _seal(_kek(password, salt), dek, f"dek:{user_id}".encode())
+
+
+def _unwrap_with_password(user_id: str, password: str, salt_b64: str, wrapped: str) -> bytes:
+    return _unseal(_kek(password, base64.b64decode(salt_b64)), wrapped, f"dek:{user_id}".encode())
+
+
+# --------------------------------------------------------------------------
 # Stockage
 # --------------------------------------------------------------------------
 
@@ -119,13 +171,21 @@ CREATE TABLE IF NOT EXISTS users (
     id TEXT PRIMARY KEY,
     username TEXT NOT NULL UNIQUE COLLATE NOCASE,
     password_hash TEXT NOT NULL,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    kek_salt TEXT,
+    wrapped_dek TEXT
 );
 CREATE TABLE IF NOT EXISTS sessions (
     token_hash TEXT PRIMARY KEY,
     user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     created_at REAL NOT NULL,
-    expires_at REAL NOT NULL
+    expires_at REAL NOT NULL,
+    wrapped_dek TEXT
+);
+CREATE TABLE IF NOT EXISTS ai_configs (
+    user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+    blob TEXT NOT NULL,
+    updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS sessions_user ON sessions(user_id);
 CREATE TABLE IF NOT EXISTS chats (
@@ -149,6 +209,7 @@ class AccountStore:
         self._lock = threading.RLock()
         self._failures: dict[tuple[str, str], list[float]] = {}
         self._ip_failures: dict[str, list[float]] = {}
+        self._registrations: dict[str, list[float]] = {}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         existed = self.path.exists()
         self._db = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
@@ -156,11 +217,19 @@ class AccountStore:
         self._db.execute("PRAGMA foreign_keys = ON")
         self._db.execute("PRAGMA journal_mode = WAL")
         self._db.executescript(SCHEMA)
+        self._migrate()
         if not existed:
             try:
                 os.chmod(self.path, 0o600)
             except OSError:
                 pass
+
+    def _migrate(self) -> None:
+        """Bases de la 1.0.1 : ajoute les colonnes de chiffrement."""
+        for table, column in (("users", "kek_salt"), ("users", "wrapped_dek"), ("sessions", "wrapped_dek")):
+            columns = {r["name"] for r in self._db.execute(f"PRAGMA table_info({table})")}
+            if column not in columns:
+                self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
 
     @classmethod
     def from_environment(cls, data_dir: Path) -> "AccountStore":
@@ -183,26 +252,48 @@ class AccountStore:
             else:
                 self._db.execute("COMMIT")
 
+    def is_admin(self, user_id: str) -> bool:
+        """Administrateur de l'instance : le premier compte créé."""
+        with self._lock:
+            row = self._db.execute("SELECT id FROM users ORDER BY created_at ASC, rowid ASC LIMIT 1").fetchone()
+        return bool(row and row["id"] == user_id)
+
     def user_count(self) -> int:
         with self._lock:
             return self._db.execute("SELECT COUNT(*) FROM users").fetchone()[0]
 
     # -- comptes ---------------------------------------------------------------
 
-    def register(self, username: str, password: str) -> dict:
+    def _check_register_throttle(self, ip: str) -> None:
+        now = self._clock()
+        recent = [t for t in self._registrations.get(ip, []) if now - t < REGISTER_WINDOW_S]
+        if len(recent) >= MAX_REGISTRATIONS_PER_IP:
+            self._registrations[ip] = recent
+            raise AccountError("too_many_registrations", "Trop de créations de compte depuis cette adresse : réessaie plus tard.",
+                               429, retry_after=max(1, int(REGISTER_WINDOW_S - (now - recent[0]))))
+        recent.append(now)
+        self._registrations[ip] = recent
+
+    def register(self, username: str, password: str, ip: str = "") -> dict:
         if not self.registration_open:
             raise AccountError("registration_closed", "Les inscriptions sont fermées sur cette instance.", 403)
+        with self._lock:
+            self._check_register_throttle(ip)
         username = normalize_username(username)
         validate_credentials(username, password)
         password_hash = hash_password(password)  # hors verrou : coûteux
         user_id = uuid.uuid4().hex
+        dek = os.urandom(32)
+        kek_salt, wrapped = _wrap_for_password(user_id, password, dek)
         try:
             with self._tx() as db:
-                db.execute("INSERT INTO users(id, username, password_hash, created_at) VALUES (?,?,?,?)",
-                           (user_id, username, password_hash, self._clock()))
+                db.execute(
+                    "INSERT INTO users(id, username, password_hash, created_at, kek_salt, wrapped_dek) "
+                    "VALUES (?,?,?,?,?,?)",
+                    (user_id, username, password_hash, self._clock(), kek_salt, wrapped))
         except sqlite3.IntegrityError:
             raise AccountError("username_taken", "Ce pseudo est déjà pris.", 409) from None
-        return {"id": user_id, "username": username}
+        return {"id": user_id, "username": username, "dek": dek}
 
     def _check_throttle(self, username: str, ip: str) -> None:
         now = self._clock()
@@ -220,7 +311,8 @@ class AccountStore:
         with self._lock:
             self._check_throttle(username, ip)
             row = self._db.execute(
-                "SELECT id, username, password_hash FROM users WHERE username = ?", (username,)).fetchone()
+                "SELECT id, username, password_hash, kek_salt, wrapped_dek FROM users WHERE username = ?",
+                (username,)).fetchone()
         ok = verify_password(password, row["password_hash"] if row else _DUMMY_HASH)
         if not row or not ok:
             with self._lock:
@@ -229,18 +321,58 @@ class AccountStore:
             raise AccountError("bad_credentials", "Pseudo ou mot de passe incorrect.", 401)
         with self._lock:
             self._failures.pop((username.lower(), ip), None)
-        return {"id": row["id"], "username": row["username"]}
+        if row["wrapped_dek"] and row["kek_salt"]:
+            dek = _unwrap_with_password(row["id"], password, row["kek_salt"], row["wrapped_dek"])
+        else:  # compte créé avant le chiffrement par compte : on génère la clé maintenant
+            dek = os.urandom(32)
+            kek_salt, wrapped = _wrap_for_password(row["id"], password, dek)
+            with self._tx() as db:
+                db.execute("UPDATE users SET kek_salt = ?, wrapped_dek = ? WHERE id = ?",
+                           (kek_salt, wrapped, row["id"]))
+        return {"id": row["id"], "username": row["username"], "dek": dek}
 
     # -- sessions ----------------------------------------------------------------
 
-    def create_session(self, user_id: str) -> str:
+    def create_session(self, user_id: str, dek: bytes | None = None) -> str:
+        """Ouvre une session ; `dek` (clé de données du compte) n'y est conservée qu'enveloppée par le jeton."""
         token = secrets.token_urlsafe(32)
         now = self._clock()
+        wrapped = _seal(_session_key(token), dek, f"sess:{user_id}".encode()) if dek else None
         with self._tx() as db:
             db.execute("DELETE FROM sessions WHERE expires_at < ?", (now,))
-            db.execute("INSERT INTO sessions(token_hash, user_id, created_at, expires_at) VALUES (?,?,?,?)",
-                       (_token_hash(token), user_id, now, now + SESSION_TTL_S))
+            db.execute(
+                "INSERT INTO sessions(token_hash, user_id, created_at, expires_at, wrapped_dek) VALUES (?,?,?,?,?)",
+                (_token_hash(token), user_id, now, now + SESSION_TTL_S, wrapped))
         return token
+
+    def dek_for_token(self, token: str | None, user_id: str) -> bytes | None:
+        """Clé de données du compte, déverrouillée par le jeton de la session en cours."""
+        if not token or len(token) > 200:
+            return None
+        with self._lock:
+            row = self._db.execute(
+                "SELECT wrapped_dek FROM sessions WHERE token_hash = ? AND user_id = ? AND expires_at > ?",
+                (_token_hash(token), user_id, self._clock())).fetchone()
+        if not row or not row["wrapped_dek"]:
+            return None
+        return _unseal(_session_key(token), row["wrapped_dek"], f"sess:{user_id}".encode())
+
+    # -- configuration IA chiffrée par compte ------------------------------------
+
+    def load_ai_config(self, user_id: str, dek: bytes) -> dict | None:
+        with self._lock:
+            row = self._db.execute("SELECT blob FROM ai_configs WHERE user_id = ?", (user_id,)).fetchone()
+        if not row:
+            return None
+        return json.loads(_unseal(dek, row["blob"], f"cfg:{user_id}".encode()).decode("utf-8"))
+
+    def save_ai_config(self, user_id: str, dek: bytes, data: dict) -> None:
+        blob = _seal(dek, json.dumps(data, ensure_ascii=False).encode("utf-8"), f"cfg:{user_id}".encode())
+        with self._tx() as db:
+            db.execute(
+                "INSERT INTO ai_configs(user_id, blob, updated_at) VALUES (?,?,?) "
+                "ON CONFLICT(user_id) DO UPDATE SET blob = excluded.blob, updated_at = excluded.updated_at",
+                (user_id, blob, self._clock()))
 
     def user_for_token(self, token: str | None) -> dict | None:
         if not token or len(token) > 200:
@@ -258,13 +390,19 @@ class AccountStore:
 
     def change_password(self, user_id: str, current: str, new: str, keep_token: str | None = None) -> None:
         with self._lock:
-            row = self._db.execute("SELECT username, password_hash FROM users WHERE id = ?", (user_id,)).fetchone()
+            row = self._db.execute(
+                "SELECT username, password_hash, kek_salt, wrapped_dek FROM users WHERE id = ?",
+                (user_id,)).fetchone()
         if not row or not verify_password(current, row["password_hash"]):
             raise AccountError("bad_credentials", "Mot de passe actuel incorrect.", 401)
         validate_credentials(row["username"], new)
         new_hash = hash_password(new)
+        dek = (_unwrap_with_password(user_id, current, row["kek_salt"], row["wrapped_dek"])
+               if row["wrapped_dek"] and row["kek_salt"] else os.urandom(32))
+        kek_salt, wrapped = _wrap_for_password(user_id, new, dek)  # la configuration reste lisible
         with self._tx() as db:
-            db.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
+            db.execute("UPDATE users SET password_hash = ?, kek_salt = ?, wrapped_dek = ? WHERE id = ?",
+                       (new_hash, kek_salt, wrapped, user_id))
             # Les autres appareils doivent se reconnecter.
             if keep_token:
                 db.execute("DELETE FROM sessions WHERE user_id = ? AND token_hash != ?",

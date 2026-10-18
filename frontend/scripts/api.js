@@ -153,16 +153,16 @@
             http("/crawler/token", { method: "PUT", body: { token: token || null, clear: !!clear }, admin: true }),
 
         aiCatalog: () => http("/ai/catalog"),
-        aiConfig: () => http("/ai/config", { admin: true }),
+        aiConfig: () => http("/ai/config"),
 
         aiTest: (providerId, config) =>
             http(`/ai/providers/${encodeURIComponent(providerId)}/test`, {
-                method: "POST", body: config, admin: true,
+                method: "POST", body: config,
             }),
 
         aiSave: (providerId, config) =>
             http(`/ai/providers/${encodeURIComponent(providerId)}`, {
-                method: "PUT", body: config, admin: true,
+                method: "PUT", body: config,
             }),
     };
 })();

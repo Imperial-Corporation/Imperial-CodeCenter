@@ -1,4 +1,4 @@
-# Documentation d'Imperial CodeCenter — v1.0.1
+# Documentation d'Imperial CodeCenter — v1.0.2
 
 | Document | Contenu |
 |---|---|
@@ -13,7 +13,7 @@
 | [api.md](api.md) | Référence des routes HTTP |
 | [configuration.md](configuration.md) | Toutes les variables d'environnement |
 | [securite.md](securite.md) | Modèle de sécurité et limites |
-| [exemples.md](exemples.md) | Les 35 scripts d'exemple |
+| [exemples.md](exemples.md) | Les 66 scripts d'exemple |
 | [tests.md](tests.md) | Lancer les tests |
 
 Captures : `docs/images/`.

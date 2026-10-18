@@ -3,11 +3,12 @@
 
 [package]
 name = "codecenter-engine"
-version = "1.0.1"
+version = "1.0.2"
 edition = "2024"
 license-file = "LICENSE"
 authors = ["Imperial <https://imperial-corporation.pages.dev/icc>"]
 homepage = "https://imperial-corporation.pages.dev/icc"
+repository = "https://github.com/Imperial-Corporation/Imperial-CodeCenter"
 description = "Moteur d'indexation et de recherche d'Imperial CodeCenter"
 
 [lib]

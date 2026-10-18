@@ -4,7 +4,7 @@
 
 ## Fournisseurs
 
-Panneau à engrenage, 18 fournisseurs : locaux — Ollama, OmniRoute, LM Studio, llama.cpp / vLLM ; distants — Claude, OpenAI, Groq, Gemini, OpenRouter, Mistral, DeepSeek, xAI, Together AI, Fireworks AI, Cerebras, NVIDIA NIM, Cohere ; plus « compatible OpenAI » libre (n'importe quelle URL `/v1`). Tous sauf Claude, Gemini et Ollama utilisent le protocole OpenAI. Configuration **globale** (un fournisseur et un modèle actifs pour tous). Les clés sont chiffrées et jamais renvoyées au navigateur. Voir le `README.md` racine pour les particularités de chaque protocole.
+Panneau à engrenage, 18 fournisseurs : locaux — Ollama, OmniRoute, LM Studio, llama.cpp / vLLM ; distants — Claude, OpenAI, Groq, Gemini, OpenRouter, Mistral, DeepSeek, xAI, Together AI, Fireworks AI, Cerebras, NVIDIA NIM, Cohere ; plus « compatible OpenAI » libre (n'importe quelle URL `/v1`). Tous sauf Claude, Gemini et Ollama utilisent le protocole OpenAI. Configuration **propre à chaque compte** (connexion requise) : fournisseur, modèle et clés sont chiffrés par le mot de passe du compte, jamais lisibles par les autres comptes ni renvoyés au navigateur. Voir le `README.md` racine pour les particularités de chaque protocole.
 
 ### OmniRoute : « Réponse du fournisseur illisible (JSON attendu) »
 
