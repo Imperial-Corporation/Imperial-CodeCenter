@@ -52,10 +52,12 @@ fn start_watcher() -> PyResult<()> {
     let thread = std::thread::Builder::new()
         .name("codecenter-watcher".into())
         .spawn(move || {
-            let runtime = match tokio::runtime::Builder::new_multi_thread()
-                .enable_all()
-                .build()
-            {
+            let mut builder = tokio::runtime::Builder::new_multi_thread();
+            builder.enable_all();
+            if let Some(threads) = database::engine_threads() {
+                builder.worker_threads(threads);
+            }
+            let runtime = match builder.build() {
                 Ok(runtime) => runtime,
                 Err(error) => {
                     eprintln!(
@@ -102,6 +104,19 @@ fn stop_watcher() -> PyResult<()> {
     }
 
     Ok(())
+}
+
+/// État du passage d'indexation (JSON) : en cours, compteurs, génération de l'index.
+#[pyfunction]
+fn scan_status() -> String {
+    watcher::status::snapshot_json()
+}
+
+/// Demande un passage d'indexation immédiat (prise en compte dès que le
+/// surveillant est libre ; sans effet si le surveillant n'est pas démarré).
+#[pyfunction]
+fn rescan_now() {
+    watcher::status::request_rescan();
 }
 
 #[pyfunction]
@@ -178,6 +193,8 @@ fn codecenter_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(list_filters, m)?)?;
     m.add_function(wrap_pyfunction!(get_stats, m)?)?;
     m.add_function(wrap_pyfunction!(indexing_issues, m)?)?;
+    m.add_function(wrap_pyfunction!(scan_status, m)?)?;
+    m.add_function(wrap_pyfunction!(rescan_now, m)?)?;
     m.add_function(wrap_pyfunction!(start_watcher, m)?)?;
     m.add_function(wrap_pyfunction!(stop_watcher, m)?)?;
 

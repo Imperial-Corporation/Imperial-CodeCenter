@@ -71,18 +71,40 @@ Les migrations manquantes s'appliquent toutes seules ; les volumes sont conserv�
 
 Utilisateur non-root (uid 10001), système de fichiers en lecture seule (sauf `/data` et `/tmp`), `cap_drop: ALL`, `no-new-privileges`, port publié en local uniquement, mot de passe PostgreSQL obligatoire, base non exposée.
 
-## Publication automatique (GitHub Actions)
+## Paquet GitHub (ghcr.io)
 
-- `.github/workflows/ci.yml` : à chaque push et pull request — cohérence des versions, en-têtes de licence, tests API (Python 3.12 et 3.13), crawler, moteur Rust, intégration PostgreSQL, puis construction **et démarrage** de l'image avec `docker compose`.
-- `.github/workflows/release.yml` : à chaque tag `vX.Y.Z` — vérifie que le tag égale `VERSION`, rejoue les tests, construit l'image **amd64 + arm64**, la publie sur `ghcr.io/imperial-corporation/imperial-codecenter` (tags `X.Y.Z`, `X.Y`, `X`, `latest`) avec attestation de provenance, construit la wheel et le sdist du moteur, et crée la release GitHub avec les notes du `CHANGELOG`.
-
-Publier une version :
+L'image est publiée automatiquement à chaque version sur **GitHub Container Registry** — dépôt → colonne de droite → **Packages** → `imperial-codecenter` :
 
 ```bash
-python3 scripts/version.py set 1.0.4      # met à jour tous les fichiers de version
-# rédige la section « ## 1.0.4 » du CHANGELOG, puis :
-python3 scripts/version.py check
-git commit -am "Version 1.0.4" && git tag v1.0.4 && git push origin main v1.0.4
+docker pull ghcr.io/imperial-corporation/imperial-codecenter:latest      # ou :1.0.4, :1.0, :1
 ```
 
-À faire une fois sur GitHub : *Settings → Actions → General → Workflow permissions* : « Read and write permissions » ; après la première publication, rends le paquet public dans *Packages → imperial-codecenter → Package settings → Change visibility*.
+Architectures : **linux/amd64** et **linux/arm64** (une seule étiquette, Docker choisit). Chaque image est analysée (Trivy), signée (cosign), accompagnée d'une attestation de provenance et d'un SBOM : voir [release.md](release.md) pour la vérifier et pour les réglages GitHub à faire une fois (visibilité publique du paquet).
+
+## Petites machines : profil léger
+
+```bash
+docker compose -f compose.yaml -f compose.lite.yaml up -d
+```
+
+Réglages PostgreSQL pour peu de mémoire et disques lents, limites mémoire/CPU, `CODECENTER_PROFILE=lite` (`ICC_PROFILE=minimal` dans `.env` pour une très petite machine). Détails : [performance.md](performance.md).
+
+## Secrets dans des fichiers
+
+```bash
+docker compose -f compose.yaml -f compose.secrets.yaml up -d      # voir l'en-tête du fichier
+```
+
+Le conteneur lit `NOM_FILE` pour : `DATABASE_URL`, `CODECENTER_ADMIN_TOKEN`, `CODECENTER_SECRET_KEY`, `CODECENTER_METRICS_TOKEN`, `CODECENTER_BACKUP_PASSPHRASE`, `GITHUB_TOKEN` (une variable déjà définie directement reste prioritaire ; fichier illisible = arrêt avec un message clair). Compatible Docker secrets, Swarm et Kubernetes. Alternative sans compose : [podman.md](podman.md).
+
+## Sauvegarde intégrée
+
+`docker compose exec app python -m icc_ai.backup create` (comptes, données, clé ; chiffrable) — voir [sauvegardes.md](sauvegardes.md).
+
+## Publication automatique (GitHub Actions)
+
+- `.github/workflows/ci.yml` : à chaque push et pull request — cohérence des versions, en-têtes de licence, tests API (Python 3.12 et 3.13), crawler, moteur Rust, intégration PostgreSQL, **interface (Playwright)**, puis construction **et démarrage** de l'image avec `docker compose` (et validation des variantes `lite` / `secrets`).
+- `.github/workflows/release.yml` : à chaque tag `vX.Y.Z` — tests, compilation Linux amd64/arm64 (+ macOS, Windows au mieux), image multi-architecture, Trivy, cosign, SBOM, **release GitHub créée automatiquement**.
+- `.github/workflows/codeql.yml` : analyse de sécurité (Python, JavaScript, workflows).
+
+Publier une version : `./scripts/tag.sh` — voir [release.md](release.md).

@@ -13,6 +13,7 @@ use tokio::sync::mpsc as tokio_mpsc;
 
 mod events;
 mod scanner;
+pub mod status;
 mod worker;
 
 type WatcherError = Box<dyn Error + Send + Sync>;
@@ -80,17 +81,11 @@ pub async fn run(
         }
     });
 
+    status::set_watching(true);
+
     // Le watcher est déjà actif : les événements survenant pendant
     // le scan initial sont conservés dans la file de réception.
-    for root in &roots {
-        if let Err(error) = scanner::scan_directory(root).await {
-            eprintln!(
-                "CodeCenter : échec du scan de {} : {}",
-                root.display(),
-                error
-            );
-        }
-    }
+    run_cycle(&roots, "initial").await;
 
     println!("CodeCenter : scan initial terminé, surveillance continue.");
 
@@ -126,11 +121,12 @@ pub async fn run(
             }
 
             _ = rescan_timer.tick(), if rescan_secs > 0 => {
-                for root in &roots {
-                    if let Err(error) = scanner::scan_directory(root).await {
-                        eprintln!("CodeCenter : échec du passage de rattrapage sur {} : {error}", root.display());
-                    }
-                }
+                run_cycle(&roots, "periodic").await;
+            }
+
+            // Passage demandé depuis l'administration (« Réindexer »).
+            _ = status::rescan_notify().notified() => {
+                run_cycle(&roots, "manual").await;
             }
 
             changed = shutdown.changed() => {
@@ -172,6 +168,68 @@ pub async fn run(
         }
     }
 
+    status::set_watching(false);
     println!("CodeCenter : surveillance arrêtée.");
     Ok(())
+}
+
+/// Un passage complet sur toutes les racines, avec suivi d'état.
+async fn run_cycle(roots: &[PathBuf], kind: &str) {
+    status::begin(kind);
+    purge_excluded_if_changed().await;
+    for root in roots {
+        if let Err(error) = scanner::scan_directory(root).await {
+            eprintln!(
+                "CodeCenter : échec du passage ({kind}) sur {} : {error}",
+                root.display()
+            );
+        }
+    }
+    status::finish();
+}
+
+/// Quand la liste d'exclusions change, retire de l'index les documents qui
+/// y correspondent désormais (les fichiers restent sur le disque).
+async fn purge_excluded_if_changed() {
+    use std::sync::Mutex;
+    static LAST: Mutex<Option<String>> = Mutex::new(None);
+
+    crate::indexing::exclusions::refresh();
+    let current = crate::indexing::exclusions::signature();
+    {
+        let mut last = LAST.lock().unwrap_or_else(|e| e.into_inner());
+        let first_time = last.is_none();
+        let unchanged = last.as_deref() == Some(current.as_str());
+        *last = Some(current.clone());
+        // Aucun motif depuis toujours : rien à retirer.
+        if unchanged || (first_time && current.is_empty()) {
+            return;
+        }
+    }
+
+    let Ok(pool) = crate::database::get_pool().await else {
+        return;
+    };
+    let paths: Vec<String> = match sqlx::query_scalar("SELECT storage_path FROM code_examples")
+        .fetch_all(pool)
+        .await
+    {
+        Ok(paths) => paths,
+        Err(_) => return,
+    };
+
+    let mut removed = 0usize;
+    for path in paths {
+        if crate::indexing::exclusions::is_excluded(std::path::Path::new(&path)) {
+            if let Ok(true) = crate::database::documents::remove_document_by_path(&path).await {
+                // Sans cela, le fichier garderait sa signature « déjà indexé » et ne serait
+                // pas ré-indexé le jour où l'exclusion est retirée.
+                crate::indexing::health::record_forget(std::path::Path::new(&path));
+                removed += 1;
+            }
+        }
+    }
+    if removed > 0 {
+        println!("CodeCenter : {removed} document(s) retiré(s) de l'index (exclusions).");
+    }
 }

@@ -80,7 +80,7 @@
         head.append(title, close);
 
         const intro = el("p", "sp-intro",
-            "Configuration globale : un seul fournisseur et un seul modèle sont actifs pour tous les utilisateurs.");
+            "Configuration de ton compte : tes clés sont chiffrées avec ton mot de passe et ne servent qu'à toi.");
 
         const body = el("form", "sp-body");
         body.noValidate = true;

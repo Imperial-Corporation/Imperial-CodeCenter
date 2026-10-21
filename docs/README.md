@@ -1,8 +1,15 @@
-# Documentation d'Imperial CodeCenter — v1.0.3
+# Documentation d'Imperial CodeCenter — v1.0.4
 
 | Document | Contenu |
 |---|---|
 | [docker.md](docker.md) | Déploiement Docker, sauvegardes, publication automatique sur GitHub (ghcr.io) |
+| [performance.md](performance.md) | Petites machines, disques durs, profils `lite` / `minimal` |
+| [administration.md](administration.md) | Comptes, inscriptions, index, exclusions, ressources, métriques |
+| [sauvegardes.md](sauvegardes.md) | Sauvegarder et restaurer (chiffrement, planification) |
+| [cli-mcp.md](cli-mcp.md) | Jetons d'API, CLI `icc`, serveur MCP |
+| [release.md](release.md) | Publier une version : `tag.sh`, compilation amd64/arm64, release automatique |
+| [podman.md](podman.md) | Déploiement Podman (Quadlet) |
+| [compatibilite.md](compatibilite.md) | Mise à jour 1.0.3 → 1.0.4 sans rien casser |
 | [installation.md](installation.md) | Installer, mettre à jour, désinstaller, diagnostiquer (`install.sh`, `doctor.sh`) |
 | [permissions.md](permissions.md) | Pourquoi « Permission denied (os error 13) » arrivait, et comment c'est réglé |
 | [comptes.md](comptes.md) | Comptes (pseudo + mot de passe), barre latérale, discussions enregistrées |

@@ -1,4 +1,4 @@
-# Référence de l'API (v1.0.3)
+# Référence de l'API (v1.0.4)
 
 Documentation interactive : `/docs`. Erreurs : `{"detail": "...", "code": "..."}`.
 
@@ -50,3 +50,30 @@ Une discussion enregistrée reçoit automatiquement les tours suivants de `/chat
 | `PUT /api/v1/crawler/token` | `{token}` ou `{clear: true}` |
 
 Codes : 401 jeton requis, 403 requête inter-sites, 409 travail déjà actif, 413 trop volumineux, 422 données invalides, 503 service/permissions.
+
+## Ajouts 1.0.4
+
+**Accès direct au code** (compte ou jeton d'API `Authorization: Bearer icc_pat_…`, sans IA) :
+
+| Route | Rôle |
+|---|---|
+| `GET /api/v1/code/search?q=&limit=&language=&category=` | recherche par mots-clés, extraits et lignes |
+| `GET /api/v1/code/documents/{id}?start_line=&end_line=` | contenu d'un document |
+| `GET /api/v1/code/filters` | langages et catégories |
+
+**Jetons d'API** (session uniquement) : `GET/POST /api/v1/auth/tokens` (`{name, expires_days}` ; le jeton n'est renvoyé qu'à la création), `DELETE /api/v1/auth/tokens/{id}`. `GET /api/v1/auth/me` ajoute `is_admin` pour un utilisateur connecté.
+
+**Administration** (administrateur ; cookie de session ou `CODECENTER_ADMIN_TOKEN`) :
+
+| Route | Rôle |
+|---|---|
+| `GET /api/v1/admin/users` | comptes + état des inscriptions |
+| `PUT /api/v1/admin/registration` | `{open}` |
+| `POST /api/v1/admin/users/{id}/disabled` | `{disabled}` |
+| `POST /api/v1/admin/users/{id}/password` | `{password}` (efface les clés IA du compte) |
+| `DELETE /api/v1/admin/users/{id}` | supprime le compte |
+| `GET /api/v1/admin/index` · `POST /api/v1/admin/index/rescan` | progression du passage, statistiques · relance |
+| `GET/PUT /api/v1/admin/index/exclusions` | `{patterns: [...]}` (un passage suit l'enregistrement) |
+| `GET /api/v1/admin/system` | ressources du serveur |
+| `GET/POST /api/v1/admin/backups` · `GET/DELETE /api/v1/admin/backups/{nom}` | sauvegardes |
+| `GET /metrics` | Prometheus ([administration.md](administration.md)) |

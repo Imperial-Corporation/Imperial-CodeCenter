@@ -198,18 +198,39 @@ CREATE TABLE IF NOT EXISTS chats (
     turns TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS chats_user ON chats(user_id, updated_at DESC);
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS api_tokens (
+    id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    wrapped_dek TEXT NOT NULL,
+    created_at REAL NOT NULL,
+    expires_at REAL,
+    last_used REAL
+);
+CREATE INDEX IF NOT EXISTS api_tokens_user ON api_tokens(user_id);
 """
+
+PAT_PREFIX = "icc_pat_"
+MAX_TOKENS_PER_USER = 20
+MAX_TOKEN_DAYS = 3650
+MAX_TOKEN_NAME = 60
 
 
 class AccountStore:
     def __init__(self, path: Path, *, registration_open: bool = True, clock=time.time):
         self.path = Path(path)
-        self.registration_open = registration_open
+        self._registration_default = registration_open
         self._clock = clock
         self._lock = threading.RLock()
         self._failures: dict[tuple[str, str], list[float]] = {}
         self._ip_failures: dict[str, list[float]] = {}
         self._registrations: dict[str, list[float]] = {}
+        self._pat_seen: dict[str, float] = {}
         self.path.parent.mkdir(parents=True, exist_ok=True)
         existed = self.path.exists()
         self._db = sqlite3.connect(self.path, check_same_thread=False, isolation_level=None)
@@ -226,10 +247,37 @@ class AccountStore:
 
     def _migrate(self) -> None:
         """Bases de la 1.0.1 : ajoute les colonnes de chiffrement."""
-        for table, column in (("users", "kek_salt"), ("users", "wrapped_dek"), ("sessions", "wrapped_dek")):
+        additions = (
+            ("users", "kek_salt", "TEXT"), ("users", "wrapped_dek", "TEXT"), ("sessions", "wrapped_dek", "TEXT"),
+            # 1.0.4 : désactivation d'un compte par l'administrateur, dernière connexion.
+            ("users", "disabled", "INTEGER NOT NULL DEFAULT 0"), ("users", "last_login", "REAL"),
+        )
+        for table, column, kind in additions:
             columns = {r["name"] for r in self._db.execute(f"PRAGMA table_info({table})")}
             if column not in columns:
-                self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} TEXT")
+                self._db.execute(f"ALTER TABLE {table} ADD COLUMN {column} {kind}")
+
+    # -- réglages persistants (modifiables depuis l'administration) ---------------
+
+    def get_setting(self, key: str, default: str | None = None) -> str | None:
+        with self._lock:
+            row = self._db.execute("SELECT value FROM settings WHERE key = ?", (key,)).fetchone()
+        return row["value"] if row else default
+
+    def set_setting(self, key: str, value: str) -> None:
+        with self._tx() as db:
+            db.execute("INSERT INTO settings(key, value) VALUES (?,?) "
+                       "ON CONFLICT(key) DO UPDATE SET value = excluded.value", (key, value))
+
+    @property
+    def registration_open(self) -> bool:
+        """Inscriptions ouvertes : réglage de l'administration, sinon `CODECENTER_REGISTRATION`."""
+        stored = self.get_setting("registration")
+        return self._registration_default if stored is None else stored == "open"
+
+    @registration_open.setter
+    def registration_open(self, value: bool) -> None:
+        self.set_setting("registration", "open" if value else "closed")
 
     @classmethod
     def from_environment(cls, data_dir: Path) -> "AccountStore":
@@ -311,9 +359,11 @@ class AccountStore:
         with self._lock:
             self._check_throttle(username, ip)
             row = self._db.execute(
-                "SELECT id, username, password_hash, kek_salt, wrapped_dek FROM users WHERE username = ?",
+                "SELECT id, username, password_hash, kek_salt, wrapped_dek, disabled FROM users WHERE username = ?",
                 (username,)).fetchone()
         ok = verify_password(password, row["password_hash"] if row else _DUMMY_HASH)
+        if row and ok and row["disabled"]:
+            raise AccountError("account_disabled", "Ce compte est désactivé : contacte l'administrateur.", 403)
         if not row or not ok:
             with self._lock:
                 self._failures.setdefault((username.lower(), ip), []).append(self._clock())
@@ -321,6 +371,8 @@ class AccountStore:
             raise AccountError("bad_credentials", "Pseudo ou mot de passe incorrect.", 401)
         with self._lock:
             self._failures.pop((username.lower(), ip), None)
+        with self._tx() as db:
+            db.execute("UPDATE users SET last_login = ? WHERE id = ?", (self._clock(), row["id"]))
         if row["wrapped_dek"] and row["kek_salt"]:
             dek = _unwrap_with_password(row["id"], password, row["kek_salt"], row["wrapped_dek"])
         else:  # compte créé avant le chiffrement par compte : on génère la clé maintenant
@@ -349,9 +401,12 @@ class AccountStore:
         """Clé de données du compte, déverrouillée par le jeton de la session en cours."""
         if not token or len(token) > 200:
             return None
+        if token.startswith(PAT_PREFIX):
+            return self._pat_dek(token, user_id)
         with self._lock:
             row = self._db.execute(
-                "SELECT wrapped_dek FROM sessions WHERE token_hash = ? AND user_id = ? AND expires_at > ?",
+                "SELECT s.wrapped_dek FROM sessions s JOIN users u ON u.id = s.user_id "
+                "WHERE s.token_hash = ? AND s.user_id = ? AND s.expires_at > ? AND u.disabled = 0",
                 (_token_hash(token), user_id, self._clock())).fetchone()
         if not row or not row["wrapped_dek"]:
             return None
@@ -377,11 +432,146 @@ class AccountStore:
     def user_for_token(self, token: str | None) -> dict | None:
         if not token or len(token) > 200:
             return None
+        if token.startswith(PAT_PREFIX):
+            return self._pat_user(token)
         with self._lock:
             row = self._db.execute(
                 "SELECT u.id, u.username FROM sessions s JOIN users u ON u.id = s.user_id "
-                "WHERE s.token_hash = ? AND s.expires_at > ?", (_token_hash(token), self._clock())).fetchone()
+                "WHERE s.token_hash = ? AND s.expires_at > ? AND u.disabled = 0",
+                (_token_hash(token), self._clock())).fetchone()
         return {"id": row["id"], "username": row["username"]} if row else None
+
+    # -- jetons d'API par compte --------------------------------------------------
+    #
+    # Un jeton d'API est une session de longue durée : la clé de données du compte y est
+    # enveloppée par le jeton lui-même (comme pour une session), si bien que la base seule ne
+    # permet jamais de l'utiliser. Il donne accès à la recherche, au chat et à la configuration
+    # IA du compte — jamais à la gestion du compte ni à l'administration.
+
+    def _pat_row(self, token: str):
+        with self._lock:
+            return self._db.execute(
+                "SELECT t.id, t.user_id, t.wrapped_dek, t.expires_at, u.username FROM api_tokens t "
+                "JOIN users u ON u.id = t.user_id WHERE t.token_hash = ? AND u.disabled = 0",
+                (_token_hash(token),)).fetchone()
+
+    def _pat_user(self, token: str) -> dict | None:
+        row = self._pat_row(token)
+        if not row or (row["expires_at"] is not None and row["expires_at"] <= self._clock()):
+            return None
+        now = self._clock()
+        if now - (self._pat_seen.get(row["id"]) or 0) > 60:  # horodatage au plus une fois par minute
+            self._pat_seen[row["id"]] = now
+            with self._tx() as db:
+                db.execute("UPDATE api_tokens SET last_used = ? WHERE id = ?", (now, row["id"]))
+        return {"id": row["user_id"], "username": row["username"]}
+
+    def _pat_dek(self, token: str, user_id: str) -> bytes | None:
+        row = self._pat_row(token)
+        if not row or row["user_id"] != user_id or (row["expires_at"] is not None and row["expires_at"] <= self._clock()):
+            return None
+        return _unseal(_session_key(token), row["wrapped_dek"], f"pat:{user_id}".encode())
+
+    def create_token(self, user_id: str, dek: bytes, name: str, expires_days: int | None = 365) -> dict:
+        name = " ".join(str(name or "").split())[:MAX_TOKEN_NAME] or "Jeton"
+        if expires_days is not None:
+            expires_days = max(1, min(int(expires_days), MAX_TOKEN_DAYS))
+        token_id = secrets.token_hex(4)
+        token = f"{PAT_PREFIX}{token_id}_{secrets.token_urlsafe(32)}"
+        now = self._clock()
+        with self._tx() as db:
+            count = db.execute("SELECT COUNT(*) FROM api_tokens WHERE user_id = ?", (user_id,)).fetchone()[0]
+            if count >= MAX_TOKENS_PER_USER:
+                raise AccountError("too_many_tokens", f"Limite de {MAX_TOKENS_PER_USER} jetons atteinte : révoque-en.", 409)
+            db.execute(
+                "INSERT INTO api_tokens(id, user_id, name, token_hash, wrapped_dek, created_at, expires_at) "
+                "VALUES (?,?,?,?,?,?,?)",
+                (token_id, user_id, name, _token_hash(token),
+                 _seal(_session_key(token), dek, f"pat:{user_id}".encode()), now,
+                 now + expires_days * 86400 if expires_days else None))
+        return {"id": token_id, "name": name, "token": token, "created_at": now,
+                "expires_at": now + expires_days * 86400 if expires_days else None}
+
+    def list_tokens(self, user_id: str) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT id, name, created_at, expires_at, last_used FROM api_tokens WHERE user_id = ? "
+                "ORDER BY created_at DESC", (user_id,)).fetchall()
+        return [{"id": r["id"], "name": r["name"], "created_at": r["created_at"],
+                 "expires_at": r["expires_at"], "last_used": r["last_used"]} for r in rows]
+
+    def revoke_token(self, user_id: str, token_id: str) -> None:
+        with self._tx() as db:
+            cursor = db.execute("DELETE FROM api_tokens WHERE id = ? AND user_id = ?", (token_id, user_id))
+            if cursor.rowcount == 0:
+                raise AccountError("token_not_found", "Jeton introuvable.", 404)
+
+    # -- administration des comptes ----------------------------------------------
+
+    def list_users(self) -> list[dict]:
+        with self._lock:
+            rows = self._db.execute(
+                "SELECT u.id, u.username, u.created_at, u.disabled, u.last_login, "
+                "(SELECT COUNT(*) FROM chats c WHERE c.user_id = u.id) AS chats, "
+                "(SELECT COUNT(*) FROM sessions s WHERE s.user_id = u.id AND s.expires_at > ?) AS sessions, "
+                "(SELECT COUNT(*) FROM api_tokens t WHERE t.user_id = u.id) AS tokens "
+                "FROM users u ORDER BY u.created_at ASC, u.rowid ASC", (self._clock(),)).fetchall()
+        first = rows[0]["id"] if rows else None
+        return [{"id": r["id"], "username": r["username"], "created_at": r["created_at"],
+                 "disabled": bool(r["disabled"]), "last_login": r["last_login"], "chats": r["chats"],
+                 "sessions": r["sessions"], "tokens": r["tokens"], "is_admin": r["id"] == first} for r in rows]
+
+    def _require_other_user(self, user_id: str) -> None:
+        if self.is_admin(user_id):
+            raise AccountError("admin_protected", "Le compte administrateur ne peut pas être modifié ainsi.", 409)
+
+    def set_disabled(self, user_id: str, disabled: bool) -> None:
+        if disabled:
+            self._require_other_user(user_id)
+        with self._tx() as db:
+            cursor = db.execute("UPDATE users SET disabled = ? WHERE id = ?", (1 if disabled else 0, user_id))
+            if cursor.rowcount == 0:
+                raise AccountError("user_not_found", "Compte introuvable.", 404)
+            if disabled:  # déconnexion immédiate de tous ses appareils
+                db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+
+    def admin_delete_user(self, user_id: str) -> None:
+        self._require_other_user(user_id)
+        with self._tx() as db:
+            cursor = db.execute("DELETE FROM users WHERE id = ?", (user_id,))
+            if cursor.rowcount == 0:
+                raise AccountError("user_not_found", "Compte introuvable.", 404)
+
+    def admin_reset_password(self, user_id: str, new_password: str) -> None:
+        """Nouveau mot de passe fixé par l'administrateur.
+
+        La clé de données du compte est enveloppée par l'ancien mot de passe : elle ne peut pas être
+        récupérée. Le compte reçoit donc une nouvelle clé, et sa configuration IA chiffrée (clés de
+        fournisseurs) ainsi que ses jetons d'API sont supprimés ; ses discussions sont conservées.
+        """
+        self._require_other_user(user_id)
+        with self._lock:
+            row = self._db.execute("SELECT username FROM users WHERE id = ?", (user_id,)).fetchone()
+        if not row:
+            raise AccountError("user_not_found", "Compte introuvable.", 404)
+        validate_credentials(row["username"], new_password)
+        new_hash = hash_password(new_password)
+        kek_salt, wrapped = _wrap_for_password(user_id, new_password, os.urandom(32))
+        with self._tx() as db:
+            db.execute("UPDATE users SET password_hash = ?, kek_salt = ?, wrapped_dek = ? WHERE id = ?",
+                       (new_hash, kek_salt, wrapped, user_id))
+            db.execute("DELETE FROM sessions WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM api_tokens WHERE user_id = ?", (user_id,))
+            db.execute("DELETE FROM ai_configs WHERE user_id = ?", (user_id,))
+
+    def snapshot_to(self, destination: Path) -> None:
+        """Copie cohérente de la base (API de sauvegarde SQLite), même en cours d'utilisation."""
+        target = sqlite3.connect(destination)
+        try:
+            with self._lock:
+                self._db.backup(target)
+        finally:
+            target.close()
 
     def end_session(self, token: str | None) -> None:
         if token:

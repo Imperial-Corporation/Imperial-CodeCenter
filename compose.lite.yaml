@@ -1,0 +1,54 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+#
+# Profil léger : petit serveur, mini-PC, Raspberry Pi, vieux PC, disque dur à plateaux.
+# S'ajoute au compose.yaml (rien à modifier dedans) :
+#
+#     docker compose -f compose.yaml -f compose.lite.yaml up -d
+#
+# Très petite machine (≤ 1,5 Gio de RAM) ou disque très lent : ICC_PROFILE=minimal dans .env.
+# Détails : docs/performance.md.
+
+services:
+  db:
+    # PostgreSQL réglé pour peu de mémoire et des disques lents. L'index se reconstruit depuis les
+    # fichiers : `synchronous_commit=off` (écriture groupée) ne risque, après une coupure brutale,
+    # que les toutes dernières secondes d'indexation, jamais la cohérence de la base.
+    command:
+      - postgres
+      - -c
+      - max_connections=20
+      - -c
+      - shared_buffers=64MB
+      - -c
+      - effective_cache_size=256MB
+      - -c
+      - work_mem=2MB
+      - -c
+      - maintenance_work_mem=32MB
+      - -c
+      - synchronous_commit=off
+      - -c
+      - wal_compression=on
+      - -c
+      - checkpoint_timeout=15min
+      - -c
+      - max_wal_size=512MB
+      - -c
+      - autovacuum_max_workers=2
+      - -c
+      - autovacuum_naptime=2min
+      - -c
+      - random_page_cost=4
+    mem_limit: 384m
+    cpus: 1.0
+    pids_limit: 200
+
+  app:
+    environment:
+      CODECENTER_PROFILE: ${ICC_PROFILE:-lite}
+      CODECENTER_NICE: ${CODECENTER_NICE:-10}
+      CODECENTER_IONICE: ${CODECENTER_IONICE:-idle}
+    mem_limit: 640m
+    cpus: 1.5
+    pids_limit: 300

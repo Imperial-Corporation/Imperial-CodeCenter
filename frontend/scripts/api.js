@@ -137,6 +137,34 @@
         changePassword: (current, next) => http("/auth/password", { method: "POST", body: { current, new: next } }),
         deleteAccount: (password) => http("/auth/delete", { method: "POST", body: { password } }),
 
+        /* Jetons d'API du compte (affichés une seule fois à la création). */
+        tokens: () => http("/auth/tokens"),
+        createToken: (name, expiresDays) =>
+            http("/auth/tokens", { method: "POST", body: { name, expires_days: expiresDays || null } }),
+        revokeToken: (id) => http(`/auth/tokens/${encodeURIComponent(id)}`, { method: "DELETE" }),
+
+        /* Administration (administrateur : cookie de session, ou jeton d'administration). */
+        admin: {
+            users: () => http("/admin/users", { admin: true }),
+            setRegistration: (open) => http("/admin/registration", { method: "PUT", body: { open }, admin: true }),
+            setDisabled: (id, disabled) =>
+                http(`/admin/users/${encodeURIComponent(id)}/disabled`, { method: "POST", body: { disabled }, admin: true }),
+            resetPassword: (id, password) =>
+                http(`/admin/users/${encodeURIComponent(id)}/password`, { method: "POST", body: { password }, admin: true }),
+            deleteUser: (id) => http(`/admin/users/${encodeURIComponent(id)}`, { method: "DELETE", admin: true }),
+            index: () => http("/admin/index", { admin: true }),
+            rescan: () => http("/admin/index/rescan", { method: "POST", admin: true }),
+            exclusions: () => http("/admin/index/exclusions", { admin: true }),
+            setExclusions: (patterns) =>
+                http("/admin/index/exclusions", { method: "PUT", body: { patterns }, admin: true }),
+            system: () => http("/admin/system", { admin: true }),
+            backups: () => http("/admin/backups", { admin: true }),
+            createBackup: (withCodes, passphrase) =>
+                http("/admin/backups", { method: "POST", body: { with_codes: !!withCodes, passphrase: passphrase || null }, admin: true }),
+            deleteBackup: (name) => http(`/admin/backups/${encodeURIComponent(name)}`, { method: "DELETE", admin: true }),
+            backupUrl: (name) => `${API_BASE}/admin/backups/${encodeURIComponent(name)}`,
+        },
+
         /* Discussions enregistrées. */
         chats: () => http("/chats"),
         saveChat: (conversationId, title) =>

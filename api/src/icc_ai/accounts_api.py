@@ -19,7 +19,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from .accounts import SESSION_TTL_S, AccountError, AccountStore
-from .api import COOKIE_NAME, Services, User, check_origin, require_user, user_from_request
+from .api import COOKIE_NAME, Services, SessionUser, User, check_origin, require_user, user_from_request
 from .errors import ChatError
 from .services import AIServices
 
@@ -72,12 +72,15 @@ class PasswordOnly(BaseModel):
 @router.get("/auth/me", tags=["Accounts"])
 def me(request: Request, services: Services):
     enabled = services.accounts is not None
-    user = user_from_request(request, services)
-    return {
+    user = user_from_request(request, services, allow_token=False)
+    data = {
         "enabled": enabled,
         "registration_open": bool(enabled and services.accounts.registration_open),
         "user": {"username": user["username"]} if user else None,
     }
+    if user:  # 1.0.4 : l'interface n'affiche l'administration qu'à l'administrateur (clé ajoutée, rien de retiré)
+        data["is_admin"] = services.accounts.is_admin(user["id"])
+    return data
 
 
 @router.post("/auth/register", tags=["Accounts"])
@@ -111,7 +114,7 @@ def logout(request: Request, response: Response, services: Services):
 
 
 @router.post("/auth/password", tags=["Accounts"])
-async def change_password(body: PasswordChange, request: Request, user: User, services: Services):
+async def change_password(body: PasswordChange, request: Request, user: SessionUser, services: Services):
     try:
         await asyncio.to_thread(services.accounts.change_password, user["id"], body.current, body.new,
                                 request.cookies.get(COOKIE_NAME))
@@ -121,12 +124,48 @@ async def change_password(body: PasswordChange, request: Request, user: User, se
 
 
 @router.post("/auth/delete", tags=["Accounts"])
-async def delete_account(body: PasswordOnly, response: Response, user: User, services: Services):
+async def delete_account(body: PasswordOnly, response: Response, user: SessionUser, services: Services):
     try:
         await asyncio.to_thread(services.accounts.delete_account, user["id"], body.password)
     except AccountError as exc:
         return _fail(exc)
     response.delete_cookie(COOKIE_NAME, path="/")
+    return {"ok": True}
+
+
+# --------------------------------------------------------------------------
+# Jetons d'API (session uniquement : un jeton ne peut pas en créer d'autres)
+# --------------------------------------------------------------------------
+
+class TokenCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=60)
+    expires_days: int | None = Field(default=365, ge=1, le=3650)
+
+
+@router.get("/auth/tokens", tags=["Accounts"])
+def list_tokens(user: SessionUser, services: Services):
+    return {"tokens": _store(services).list_tokens(user["id"])}
+
+
+@router.post("/auth/tokens", tags=["Accounts"])
+def create_token(body: TokenCreate, request: Request, user: SessionUser, services: Services):
+    """Crée un jeton d'API (affiché une seule fois). Il ouvre la recherche, le chat et la configuration IA du compte."""
+    store = _store(services)
+    dek = store.dek_for_token(request.cookies.get(COOKIE_NAME), user["id"])
+    if dek is None:
+        return _fail(AccountError("locked", "Session à renouveler : reconnecte-toi.", 401))
+    try:
+        return store.create_token(user["id"], dek, body.name, body.expires_days)
+    except AccountError as exc:
+        return _fail(exc)
+
+
+@router.delete("/auth/tokens/{token_id}", tags=["Accounts"])
+def revoke_token(token_id: str, user: SessionUser, services: Services):
+    try:
+        _store(services).revoke_token(user["id"], token_id)
+    except AccountError as exc:
+        return _fail(exc)
     return {"ok": True}
 
 

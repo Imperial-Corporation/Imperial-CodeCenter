@@ -1,0 +1,32 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+#
+# Imperial CodeCenter (Podman Quadlet). Secret DATABASE_URL :
+#   printf 'postgresql://codecenter:MOTDEPASSE@icc-db:5432/imperial_codecenter' | podman secret create icc_database_url -
+[Unit]
+Description=Imperial CodeCenter
+Requires=icc-db.service
+After=icc-db.service
+
+[Container]
+ContainerName=icc-app
+Image=ghcr.io/imperial-corporation/imperial-codecenter:latest
+Network=icc.network
+PublishPort=127.0.0.1:8000:8000
+Volume=icc-data.volume:/data
+Secret=icc_database_url,type=env,target=DATABASE_URL
+ReadOnly=true
+Tmpfs=/tmp
+DropCapability=ALL
+NoNewPrivileges=true
+# Profil léger : décommente.
+# Environment=CODECENTER_PROFILE=lite
+# Memory=640m
+AutoUpdate=registry
+
+[Service]
+Restart=always
+TimeoutStartSec=300
+
+[Install]
+WantedBy=default.target

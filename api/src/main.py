@@ -11,15 +11,23 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.gzip import GZipMiddleware
 
-from codecenter_engine import get_stats, healt, start_watcher, stop_watcher
+# Le profil de ressources s'applique avant tout le reste (variables lues à l'import et par le moteur).
+from icc_ai import profile as _profile
+
+PROFILE = _profile.apply(Path(os.environ["CODECENTER_DATA_DIR"]) if os.environ.get("CODECENTER_DATA_DIR") else None)
+
+from codecenter_engine import get_stats, healt, start_watcher, stop_watcher  # noqa: E402
 
 from icc_ai.about import ATTRIBUTION, LICENSE_NAME, VERSION, WEBSITE, about
 from icc_ai.accounts_api import router as accounts_router
 from icc_ai.admin_api import router as admin_router
+from icc_ai.admin_panel_api import backup_loop, public_router as metrics_router, router as admin_panel_router
+from icc_ai.code_api import router as code_router
 from icc_ai.api import router as ai_router
 from icc_ai.proxy import ProxyMiddleware, ProxySettings
-from icc_ai.services import build_services
+from icc_ai.services import build_services, data_dir
 
 
 # --------------------------------------------------
@@ -61,7 +69,10 @@ async def _depot_loop(library) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Démarre et arrête le watcher avec l'application."""
-    logger.info("Démarrage du watcher CodeCenter")
+    logger.info("Démarrage du watcher CodeCenter (profil : %s)", PROFILE["profile"])
+    app.state.profile = PROFILE
+    # Exclusions modifiables depuis l'administration : le moteur relit ce fichier tout seul.
+    os.environ.setdefault("CODECENTER_EXCLUDE_FILE", str(data_dir() / "exclude.txt"))
     start_watcher()
 
     # Services IA : configuration chiffrée, moteur Rust, orchestrateur.
@@ -78,15 +89,17 @@ async def lifespan(app: FastAPI):
     if services is not None and services.library is not None:
         services.library.ensure_depot()
         depot_task = asyncio.create_task(_depot_loop(services.library))
+    backup_task = asyncio.create_task(backup_loop(services)) if services is not None else None
     if services is not None and services.crawler is not None:
         services.crawler.resume()
 
     try:
         yield
     finally:
-        if depot_task is not None:
-            depot_task.cancel()
-            await asyncio.gather(depot_task, return_exceptions=True)
+        for task in (depot_task, backup_task):
+            if task is not None:
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
         if services is not None and services.crawler is not None:
             await services.crawler.shutdown()
         logger.info("Arrêt du watcher CodeCenter")
@@ -109,7 +122,17 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.mount("/static", StaticFiles(directory=FRONTEND), name="static")
+class RevalidatedStaticFiles(StaticFiles):
+    """Fichiers statiques : ETag + revalidation (réponse 304 sans corps), donc rapide sur une machine
+    lente et toujours à jour après une mise à jour."""
+
+    def file_response(self, *args, **kwargs):
+        response = super().file_response(*args, **kwargs)
+        response.headers.setdefault("Cache-Control", "public, max-age=0, must-revalidate")
+        return response
+
+
+app.mount("/static", RevalidatedStaticFiles(directory=FRONTEND), name="static")
 
 
 # --------------------------------------------------
@@ -136,6 +159,12 @@ async def about_route():
 app.include_router(ai_router)
 app.include_router(admin_router)
 app.include_router(accounts_router)
+app.include_router(admin_panel_router)
+app.include_router(code_router)
+app.include_router(metrics_router)
+
+# Compression des réponses (JS, CSS, JSON) : moins de trafic, utile sur petit débit.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 
 # Proxy inverse (nginx / Cloudflare) : inactif sauf si CODECENTER_PROXY_MODE le demande.
 # Les en-têtes de sécurité sont envoyés dans tous les cas.

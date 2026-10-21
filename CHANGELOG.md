@@ -1,5 +1,20 @@
 # Changelog
 
+## 1.0.4
+Rétrocompatible : mise à jour sans modification de configuration ni de données ([docs/compatibilite.md](docs/compatibilite.md)).
+
+- **Paquet GitHub (ghcr.io)** : image **amd64 + arm64** publiée à chaque version (onglet *Packages*), analysée par Trivy, signée par cosign, avec attestation de provenance et SBOM ; CodeQL.
+- **Publication d'une version** : `scripts/tag.sh [X.Y.Z]` (version lue dans `VERSION`, contrôles, tag annoté, push) ; la CI teste, compile et crée **automatiquement la release GitHub** avec le texte de `release-notes/X.Y.Z.md` (sinon la section du CHANGELOG) : wheels du moteur Linux amd64/arm64 (macOS universal2 et Windows au mieux), sdist, sources, CLI `icc.pyz`, SBOM, `SHA256SUMS`. `scripts/version.py` : notes depuis un fichier, `check --notes`.
+- **Léger, y compris sur disque dur** : profils `CODECENTER_PROFILE` (`standard`, `lite`, `minimal`, `auto`) ; **index de contenu dans PostgreSQL** (migration `004`, `pg_trgm`) : la recherche ne relit plus des centaines de fichiers (extraits lus seulement pour les résultats affichés), avec repli automatique sans la migration ; signatures de fichiers conservées en base (**redémarrage sans relecture** de l'arbre) ; une seule lecture par fichier ; pauses d'indexation, priorités CPU/disque, pool et threads réglables ; cache de recherche ; réponses gzip et statiques revalidés (ETag) ; `compose.lite.yaml` (PostgreSQL réglé, limites mémoire/CPU) ; `scripts/bench.py`.
+- **Administration** : comptes (désactiver, réactiver, réinitialiser le mot de passe, supprimer), inscriptions ouvertes/fermées sans redémarrage, progression de l'indexation en direct, réindexation, **exclusions** (`*.min.js`, `node_modules`…) appliquées aussitôt, moniteur de ressources, **`/metrics` Prometheus**.
+- **Sauvegarde / restauration** : archive avec manifeste et empreintes, chiffrement optionnel (AES-256-GCM, scrypt), sauvegardes planifiées avec rotation, création depuis l'interface, restauration vérifiée hors ligne (`python -m icc_ai.backup`).
+- **Jetons d'API par compte** (limités à la recherche, au chat et à la configuration IA du compte), CLI **`icc`** (stdlib seule), routes `/api/v1/code/*` sans IA et **serveur MCP** (stdio).
+- **Interface FR / EN** (sélecteur en pied de page, langue du navigateur par défaut) ; `README.en.md`.
+- **Conteneurs** : secrets par fichier (`*_FILE`, `compose.secrets.yaml`), **Podman** (Quadlet), `PYTHONPATH` pour les commandes dans le conteneur.
+- **Qualité** : tests e2e Playwright en CI, tests de compatibilité 1.0.3 → 1.0.4 (routes figées, base des comptes migrée, base PostgreSQL sans migration 004), tests d'intégration étendus.
+- **Correctifs** : texte périmé du panneau IA (« configuration globale » alors que les clés sont par compte depuis la 1.0.2).
+- **Non inclus** : mode SQLite seul (réécriture du moteur) et recherche sémantique par embeddings (contraire à l'objectif de légèreté) ; le « profil léger » est un profil d'exécution de la même image, pas une image distincte.
+
 ## 1.0.3
 - **Docker** : `Dockerfile` multi-étapes (moteur Rust compilé dans une étape dédiée, image finale sans compilateur, utilisateur non-root `uid 10001`, `tini`, contrôle de santé) et `compose.yaml` avec PostgreSQL 16 (mot de passe obligatoire, base non exposée, système de fichiers en lecture seule, `cap_drop: ALL`, port publié en local). Au démarrage : clé de chiffrement persistante dans le volume, attente de PostgreSQL, migrations appliquées une seule fois, exemples copiés une seule fois. Guide : `docs/docker.md`.
 - **Publication automatique (GitHub Actions)** : `ci.yml` (versions, en-têtes de licence, tests API Python 3.12/3.13, crawler, moteur Rust, intégration PostgreSQL, construction et démarrage de l'image) ; `release.yml` à chaque tag `vX.Y.Z` (vérification du tag, tests, image amd64 + arm64 sur `ghcr.io/imperial-corporation/imperial-codecenter` avec attestation de provenance, wheel et sdist du moteur, release GitHub avec les notes du CHANGELOG) ; Dependabot. `scripts/version.py` (`check`, `set`, `notes`) garde toutes les versions cohérentes.

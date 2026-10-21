@@ -16,6 +16,7 @@
     let currentUser = null;
     let registrationOpen = true;
     let enabled = true;
+    let isAdmin = false;
     const listeners = [];
     let dialog = null;
 
@@ -32,6 +33,7 @@
 
     function setUser(user) {
         currentUser = user || null;
+        if (!currentUser) isAdmin = false;
         emit();
     }
 
@@ -40,6 +42,7 @@
             const data = await ICC.services.me();
             registrationOpen = data.registration_open !== false;
             enabled = data.enabled !== false;
+            isAdmin = !!data.is_admin;
             setUser(data.user || null);
         } catch {
             setUser(null);
@@ -131,6 +134,7 @@
         form.addEventListener("submit", guard(submit, error, async () => {
             const call = registering ? ICC.services.register : ICC.services.login;
             const data = await call(user.input.value.trim(), pass.input.value);
+            try { isAdmin = !!(await ICC.services.me()).is_admin; } catch { isAdmin = false; }
             setUser(data.user);
             dialog.close();
         }));
@@ -175,6 +179,55 @@
         next.input.required = false;
         pwd.append(current.wrap, next.wrap, pwdError, pwdOk, pwdButton);
 
+        // Jetons d'API
+        const tokens = el("details", "auth-section");
+        tokens.append(el("summary", "", "Jetons d'API"));
+        tokens.append(el("p", "",
+            "Pour la ligne de commande (icc), le serveur MCP et les scripts : un jeton ouvre la recherche, le chat et ta configuration IA, " +
+            "jamais la gestion du compte ni l'administration. Il n'est affiché qu'une fois."));
+        const tokenList = el("ul", "adm-list");
+        const tokenName = el("input", "adm-input");
+        tokenName.placeholder = "Nom du jeton (ex. portable)";
+        tokenName.maxLength = 60;
+        const tokenError = el("p", "auth-error");
+        tokenError.setAttribute("role", "alert");
+        const tokenShown = el("div");
+        async function loadTokens() {
+            try {
+                const data = await ICC.services.tokens();
+                tokenList.replaceChildren();
+                if (!data.tokens.length) tokenList.append(el("li", "adm-muted", "Aucun jeton."));
+                data.tokens.forEach((t) => {
+                    const li = el("li");
+                    li.append(el("strong", "", t.name),
+                        el("span", "adm-muted", ` · créé ${new Date(t.created_at * 1000).toLocaleDateString()}` +
+                            (t.expires_at ? ` · expire ${new Date(t.expires_at * 1000).toLocaleDateString()}` : "") +
+                            (t.last_used ? ` · utilisé ${new Date(t.last_used * 1000).toLocaleDateString()}` : "")));
+                    const revoke = el("button", "adm-btn adm-danger", "Révoquer");
+                    revoke.type = "button";
+                    revoke.addEventListener("click", async () => {
+                        try { await ICC.services.revokeToken(t.id); loadTokens(); } catch (e) { tokenError.textContent = e.message; }
+                    });
+                    li.append(revoke);
+                    tokenList.append(li);
+                });
+            } catch (e) {
+                tokenError.textContent = e.message;
+            }
+        }
+        const tokenCreate = el("button", "auth-secondary", "Créer un jeton");
+        tokenCreate.type = "button";
+        tokenCreate.addEventListener("click", guard(tokenCreate, tokenError, async () => {
+            const made = await ICC.services.createToken(tokenName.value.trim() || "Jeton", 365);
+            tokenName.value = "";
+            tokenShown.replaceChildren(
+                el("p", "", "Copie ce jeton maintenant, il ne sera plus affiché :"),
+                el("code", "adm-token", made.token));
+            loadTokens();
+        }));
+        tokens.addEventListener("toggle", () => { if (tokens.open) loadTokens(); });
+        tokens.append(tokenList, tokenName, tokenCreate, tokenShown, tokenError);
+
         // Suppression
         const del = el("details", "auth-section");
         del.append(el("summary", "", "Supprimer mon compte"));
@@ -207,7 +260,14 @@
         }));
         actions.append(close, out);
 
-        form.append(pwd, del, outError, actions);
+        form.append(pwd, tokens);
+        if (isAdmin && ICC.admin) {
+            const admin = el("button", "auth-secondary", "Administration");
+            admin.type = "button";
+            admin.addEventListener("click", () => { dialog.close(); ICC.admin.open(); });
+            form.append(admin);
+        }
+        form.append(del, outError, actions);
         form.addEventListener("submit", (event) => event.preventDefault());
         return { form, focus: null };
     }

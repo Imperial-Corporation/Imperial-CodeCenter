@@ -34,3 +34,5 @@ Limites : 200 discussions par compte, 3 Mo par discussion.
 - Changer de mot de passe réencrypte la clé de données. **Mot de passe oublié = clés à ressaisir.**
 - Les comptes de la 1.0.1 reçoivent leur clé à la prochaine connexion ; l'ancienne configuration globale est ignorée.
 - Le premier compte créé est administrateur (bibliothèque, crawler).
+
+Depuis la 1.0.4 : jetons d'API par compte ([cli-mcp.md](cli-mcp.md)) et administration des comptes (désactiver, réinitialiser, supprimer, fermer les inscriptions : [administration.md](administration.md)).

@@ -39,6 +39,7 @@ jobs:
       - name: Scripts shell
         run: |
           for f in scripts/*.sh scripts/lib/*.sh docker/entrypoint.sh; do bash -n "$f"; done
+          python3 -m py_compile scripts/icc scripts/bench.py scripts/version.py
           shellcheck --severity=error docker/entrypoint.sh
 
   api:
@@ -121,6 +122,18 @@ jobs:
         run: .venv/bin/python -m pytest -q -p no:cacheprovider tests/test_integration_engine.py
         working-directory: api
 
+  e2e:
+    name: Interface (Playwright)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install "playwright==1.56.0" "pytest>=8"
+      - run: playwright install --with-deps chromium
+      - run: python -m pytest e2e -q -p no:cacheprovider
+
   docker:
     name: Image Docker (construction + démarrage)
     runs-on: ubuntu-24.04
@@ -136,6 +149,14 @@ jobs:
           tags: icc-ci:test
           cache-from: type=gha
           cache-to: type=gha,mode=max
+      - name: Variantes compose valides (lite, secrets)
+        env:
+          POSTGRES_PASSWORD: ci0123456789abcdef
+        run: |
+          mkdir -p secrets && for f in db_password database_url admin_token; do echo ci > "secrets/$f"; done
+          docker compose -f compose.yaml -f compose.lite.yaml config -q
+          docker compose -f compose.yaml -f compose.lite.yaml -f compose.secrets.yaml config -q
+          rm -rf secrets
       - name: Démarrage complet (compose) et contrôle de santé
         env:
           POSTGRES_PASSWORD: ci0123456789abcdef

@@ -13,6 +13,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -39,6 +40,31 @@ struct State {
 }
 
 static STATE: OnceLock<Mutex<State>> = OnceLock::new();
+
+/// Compteur incrémenté à chaque changement de l'index (document ajouté,
+/// modifié ou retiré) : l'API s'en sert pour invalider son cache de recherche.
+static GENERATION: AtomicU64 = AtomicU64::new(0);
+
+pub fn generation() -> u64 {
+    GENERATION.load(Ordering::SeqCst)
+}
+
+fn bump_generation() {
+    GENERATION.fetch_add(1, Ordering::SeqCst);
+}
+
+/// Charge les signatures (date, taille) mémorisées en base : après un
+/// redémarrage, les fichiers inchangés ne sont pas relus (précieux sur un
+/// disque dur).
+pub fn preload_signatures(entries: impl IntoIterator<Item = (PathBuf, u64, i64)>) -> usize {
+    let mut state = state();
+    let mut count = 0;
+    for (path, mtime, size) in entries {
+        state.indexed.insert(path, (mtime, size));
+        count += 1;
+    }
+    count
+}
 
 fn state() -> std::sync::MutexGuard<'static, State> {
     STATE
@@ -70,6 +96,7 @@ pub fn is_unchanged(path: &Path) -> bool {
 }
 
 pub fn record_success(original: &Path, stored: &Path) {
+    bump_generation();
     let mut state = state();
     state.failures.remove(original);
     state.skipped.remove(original);
@@ -107,6 +134,7 @@ pub fn reset_attempts(path: &Path) {
 }
 
 pub fn record_forget(path: &Path) {
+    bump_generation();
     let mut state = state();
     state.failures.remove(path);
     state.skipped.remove(path);
@@ -190,6 +218,18 @@ mod tests {
         assert!(!retry_candidates().contains(&path));
         reset_attempts(&path);
         assert!(retry_candidates().contains(&path));
+        record_forget(&path);
+    }
+
+    #[test]
+    fn generation_moves_with_the_index_and_signatures_preload() {
+        let before = generation();
+        let path = PathBuf::from("/tmp/icc-health-test-c.py");
+        record_forget(&path);
+        assert!(generation() > before);
+        assert_eq!(preload_signatures(vec![(path.clone(), 1, 2)]), 1);
+        // le fichier n'existe pas : jamais « inchangé »
+        assert!(!is_unchanged(&path));
         record_forget(&path);
     }
 

@@ -1,6 +1,6 @@
 # Imperial CodeCenter
 
-**Version 1.0.3** — Moteur de recherche de code et de documentation, assisté par IA.
+**Version 1.0.4** — Moteur de recherche de code et de documentation, assisté par IA.
 
 Exception : le créateur et les membres de l'équipe Imperial Corporation ne sont pas tenus par ces obligations (article 5.8, personnelle et non transmissible).
 
@@ -34,7 +34,9 @@ frontend/ (HTML/CSS/JS)  ──HTTP──▶  api/ (FastAPI + Python)  ──PyO
 | `.github/` | Workflows CI et publication automatique. |
 | `examples/` | 66 scripts d'exemple installés au premier déploiement. |
 | `docs/` | Documentation complète en français. |
-| `scripts/` | `install.sh` (tout en un), `build.sh`, `deploy.sh`, `release.sh`, `fix_permissions.sh`, `doctor.sh`, `setup_proxy.sh`, `update_cloudflare_ips.sh`, `install_examples.sh`, `clean.sh`. |
+| `e2e/` | Tests de bout en bout de l'interface (Playwright). |
+| `release-notes/` | Texte de chaque release GitHub (`X.Y.Z.md`). |
+| `scripts/` | `tag.sh` (publier une version), `icc` (CLI + MCP), `bench.py`, `install.sh` (tout en un), `build.sh`, `deploy.sh`, `release.sh`, `fix_permissions.sh`, `doctor.sh`, `setup_proxy.sh`, `update_cloudflare_ips.sh`, `install_examples.sh`, `clean.sh`. |
 
 Python orchestre les fournisseurs et les outils ; Rust effectue les opérations sur l'index et les fichiers. Python appelle directement les fonctions Rust (aucun appel HTTP interne).
 
@@ -45,6 +47,7 @@ Python orchestre les fournisseurs et les outils ; Rust effectue les opérations 
 | `search(query, limit=10, language=None, category=None)` | Recherche (métadonnées PostgreSQL + contenu des fichiers), JSON avec extraits et numéros de ligne. |
 | `get_document(document_id, start_line=None, end_line=None, max_bytes=None)` | Lecture d'un fichier indexé, par plage de lignes, plafonnée. |
 | `list_filters()` | Langages et catégories présents dans l'index. |
+| `scan_status()`, `rescan_now()` | 1.0.4 : progression du passage d'indexation (JSON) et passage immédiat. |
 | `get_stats()`, `healt()`, `start_watcher()`, `stop_watcher()` | Existantes, inchangées. |
 
 Les erreurs Rust deviennent `ValueError` (entrée invalide), `LookupError` (introuvable), `PermissionError` (chemin hors des dossiers surveillés) ou `RuntimeError`. Un chemin lu en base n'est jamais ouvert sans être canonicalisé (liens symboliques résolus) et contenu dans `CODECENTER_WATCH_PATHS`.
@@ -140,6 +143,17 @@ La configuration est **propre à chaque compte** et chiffrée avec une clé prot
 
 Particularités gérées par les connecteurs : système séparé et blocs `tool_use`/`tool_result` (Claude) ; arguments d'outils en chaîne JSON, `max_completion_tokens` vs `max_tokens` (OpenAI-compatibles) ; schémas OpenAPI restreints, `functionCall` sans identifiant, clé en en-tête (Gemini) ; arguments objets, `num_ctx`, modèle sans outils (Ollama, repli automatique sans outils).
 
+## Nouveautés de la 1.0.4
+
+Mise à jour **sans rien changer** : tout est rétrocompatible ([docs/compatibilite.md](docs/compatibilite.md)).
+
+- **Paquet GitHub** (`ghcr.io`, onglet *Packages*) pour **amd64 et arm64**, analysé (Trivy), signé (cosign), avec SBOM et provenance ; **release automatique** à chaque tag, créée avec `./scripts/tag.sh` ([docs/release.md](docs/release.md)).
+- **Léger** : profil `lite` / `minimal` / `auto`, index de contenu dans PostgreSQL (la recherche ne relit plus les fichiers), redémarrage sans relecture, pauses et priorités d'indexation, cache de recherche, `compose.lite.yaml` ; pensé pour petits serveurs, PC modestes et **disques durs** ([docs/performance.md](docs/performance.md)).
+- **Administration** : comptes (désactiver, réinitialiser, supprimer), inscriptions ouvertes/fermées, progression de l'index en direct, relance, exclusions, ressources du serveur, **métriques Prometheus** ([docs/administration.md](docs/administration.md)).
+- **Sauvegarde / restauration** chiffrables, planifiables ([docs/sauvegardes.md](docs/sauvegardes.md)).
+- **Jetons d'API par compte**, CLI **`icc`** et **serveur MCP** ([docs/cli-mcp.md](docs/cli-mcp.md)).
+- **Interface FR / EN** ([README.en.md](README.en.md)), secrets `*_FILE`, **Podman** ([docs/podman.md](docs/podman.md)), tests e2e Playwright, CodeQL.
+
 ## Nouveautés de la 1.0.3
 
 - **Docker** : `Dockerfile` multi-étapes (moteur Rust compilé, image finale sans compilateur, utilisateur non-root, système de fichiers en lecture seule) et `compose.yaml` avec PostgreSQL ; migrations et clé de chiffrement gérées au démarrage.
@@ -213,7 +227,7 @@ Les identifiants inventés par le modèle sont retirés avec un avertissement. `
 
 ## Frontend
 
-`api.js` (services réseau), `highlight.js` (coloration syntaxique), `markdown.js`, `answer-view.js` (carte de réponse), `conversation.js` (discussion), `auth.js` (compte), `sidebar.js` (barre latérale), `settings-panel.js` et `crawler-panel.js` (panneaux), `app.js` (assemblage). Tout contenu est inséré avec `textContent` : le HTML produit par un modèle n'est jamais interprété.
+`api.js` (services réseau), `highlight.js` (coloration syntaxique), `markdown.js`, `answer-view.js` (carte de réponse), `conversation.js` (discussion), `auth.js` (compte), `sidebar.js` (barre latérale), `settings-panel.js` et `crawler-panel.js` (panneaux), `admin-panel.js` (administration), `i18n.js` / `i18n-en.js` (français / anglais), `app.js` (assemblage). Tout contenu est inséré avec `textContent` : le HTML produit par un modèle n'est jamais interprété.
 
 ## Sécurité
 

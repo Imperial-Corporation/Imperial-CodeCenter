@@ -7,8 +7,9 @@ use std::time::Duration;
 use sqlx::postgres::{PgPool, PgPoolOptions};
 use tokio::runtime::Runtime;
 
-pub mod stats;
+pub mod content;
 pub mod documents;
+pub mod stats;
 
 static DATABASE: OnceLock<PgPool> = OnceLock::new();
 static RUNTIME: OnceLock<Runtime> = OnceLock::new();
@@ -29,8 +30,15 @@ async fn initialize() -> Result<(), sqlx::Error> {
         )
     })?;
 
+    // Petite machine : CODECENTER_DB_MAX_CONNECTIONS=3 (10 par défaut).
+    let max_connections: u32 = std::env::var("CODECENTER_DB_MAX_CONNECTIONS")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .filter(|value| (1..=100).contains(value))
+        .unwrap_or(10);
+
     let pool = PgPoolOptions::new()
-        .max_connections(10)
+        .max_connections(max_connections)
         .acquire_timeout(Duration::from_secs(5))
         .connect(&database_url)
         .await?;
@@ -60,13 +68,23 @@ pub async fn get_pool() -> Result<&'static PgPool, sqlx::Error> {
     pool()
 }
 
+/// Nombre de threads de travail (`CODECENTER_ENGINE_THREADS`) ; `None` = automatique.
+pub fn engine_threads() -> Option<usize> {
+    std::env::var("CODECENTER_ENGINE_THREADS")
+        .ok()
+        .and_then(|value| value.trim().parse().ok())
+        .filter(|value| (1..=64).contains(value))
+}
+
 /// Runtime Tokio partagé par les appels bloquants exposés à Python.
 pub fn runtime() -> &'static Runtime {
     RUNTIME.get_or_init(|| {
-        tokio::runtime::Builder::new_multi_thread()
-            .enable_all()
-            .build()
-            .expect("Impossible de créer le runtime Tokio")
+        let mut builder = tokio::runtime::Builder::new_multi_thread();
+        builder.enable_all();
+        if let Some(threads) = engine_threads() {
+            builder.worker_threads(threads);
+        }
+        builder.build().expect("Impossible de créer le runtime Tokio")
     })
 }
 

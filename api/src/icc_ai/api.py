@@ -27,6 +27,7 @@ from .catalog import PROVIDERS, catalog_payload
 from .config.models import ProviderConfigIn
 from .config.user_store import UserConfigStore
 from .netguard import ForbiddenProviderUrl
+from .profile import search_concurrency
 from .errors import ChatError, ConfigError, EngineError, ProviderError, SearchCancelled
 from .providers.registry import create_provider
 from .response import SearchResponse
@@ -38,7 +39,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1")
 
 # Recherches simultanées au plus : protège le moteur et le fournisseur.
-_search_gate = asyncio.Semaphore(4)
+_search_gate = asyncio.Semaphore(search_concurrency())
 
 _PROVIDER_STATUS = {
     "timeout": 504, "rate_limit": 429, "auth": 502, "network": 502,
@@ -60,10 +61,25 @@ Services = Annotated[AIServices, Depends(get_services)]
 COOKIE_NAME = "icc_session"
 
 
-def user_from_request(request: Request, services: AIServices) -> dict | None:
+def credential(request: Request, *, allow_token: bool = True) -> str | None:
+    """Identifiant de l'appelant : cookie de session, ou jeton d'API `Authorization: Bearer icc_pat_…`.
+
+    Un jeton d'API n'est jamais accepté là où `allow_token=False` (gestion du compte, administration).
+    """
+    cookie = request.cookies.get(COOKIE_NAME)
+    if cookie:
+        return cookie
+    if allow_token:
+        header = request.headers.get("authorization", "")
+        if header.lower().startswith("bearer ") and header[7:].startswith("icc_pat_"):
+            return header[7:].strip()
+    return None
+
+
+def user_from_request(request: Request, services: AIServices, *, allow_token: bool = True) -> dict | None:
     if services.accounts is None:
         return None
-    token = request.cookies.get(COOKIE_NAME)
+    token = credential(request, allow_token=allow_token)
     user = services.accounts.user_for_token(token)
     if user is None:
         return None
@@ -73,6 +89,17 @@ def user_from_request(request: Request, services: AIServices) -> dict | None:
         unlocked = False
     # Une session sans clé de données (ouverte avant le chiffrement par compte) n'est plus valable.
     return user if unlocked else None
+
+
+def require_session_user(request: Request, services: Services) -> dict:
+    """Compte connecté par cookie de session (pas par jeton d'API) : gestion du compte."""
+    user = user_from_request(request, services, allow_token=False)
+    if user is None:
+        raise HTTPException(401, "Connexion requise (session) : cette action n'est pas disponible avec un jeton d'API.")
+    return user
+
+
+SessionUser = Annotated[dict, Depends(require_session_user)]
 
 
 def require_user(request: Request, services: Services) -> dict:
@@ -132,7 +159,7 @@ def user_config(request: Request, services: Services, user: User) -> UserConfigS
     from .accounts import AccountError
 
     try:
-        dek = services.accounts.dek_for_token(request.cookies.get(COOKIE_NAME), user["id"])
+        dek = services.accounts.dek_for_token(credential(request), user["id"])
     except AccountError:
         dek = None
     if dek is None:  # session sans clé (ancienne session) : reconnexion nécessaire pour déverrouiller
@@ -168,7 +195,7 @@ def require_admin(request: Request, services: Services) -> None:
         if supplied and hmac.compare_digest(supplied.encode(), token.encode()):
             return
 
-    user = user_from_request(request, services)
+    user = user_from_request(request, services, allow_token=False)
     if user is not None and services.accounts is not None and services.accounts.is_admin(user["id"]):
         return
     if user is not None:

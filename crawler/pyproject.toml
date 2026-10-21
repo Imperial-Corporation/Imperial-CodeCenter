@@ -3,7 +3,7 @@
 
 [project]
 name = "icc-crawler"
-version = "1.0.3"
+version = "1.0.4"
 description = "Crawler GitHub d'Imperial CodeCenter : collecte et range automatiquement des scripts sous licence permissive. Créé par Imperial (https://imperial-corporation.pages.dev/icc)."
 requires-python = ">=3.10"
 license = { text = "LicenseRef-Imperial-Community-1.0" }

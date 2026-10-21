@@ -41,7 +41,15 @@ def indexed(tmp_path_factory):
     (root / "rust").mkdir()
     (root / "rust" / "lecture.rs").write_text(f"pub fn lire_{MARKER}() -> i32 {{\n    1\n}}\n")
 
+    (root / "web").mkdir()
+    (root / "web" / "bundle.min.js").write_text(f"var {MARKER}_exclu = 1;\n")
+    saved_env = {k: os.environ.get(k) for k in (
+        "DATABASE_URL", "CODECENTER_EXCLUDE", "CODECENTER_EXCLUDE_FILE", "CODECENTER_WATCH_PATHS")}
     os.environ["DATABASE_URL"] = DB_URL
+    os.environ["CODECENTER_EXCLUDE"] = "*.min.js"
+    exclude_file = tmp_path_factory.mktemp("cfg") / "exclude.txt"
+    exclude_file.write_text("")
+    os.environ["CODECENTER_EXCLUDE_FILE"] = str(exclude_file)
     os.environ["CODECENTER_WATCH_PATHS"] = str(root)
 
     engine_module.start_watcher()
@@ -53,6 +61,11 @@ def indexed(tmp_path_factory):
         yield root
     finally:
         engine_module.stop_watcher()
+        for key, value in saved_env.items():  # ne pas polluer les autres tests
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
 
 
 def test_recherche_lecture_et_filtres_reels(indexed):
@@ -129,3 +142,53 @@ def test_pipeline_complet_avec_vrai_moteur(indexed, store):
     assert response.tool_trace[0].ok
     assert response.sources[0].path.endswith((".py", ".rs"))
     assert response.meta.provider == "ollama" and response.meta.tool_calls == 1
+
+
+def test_index_de_contenu_recherche_sans_relire_le_disque(indexed):
+    """Le contenu vient de PostgreSQL : supprimer le fichier du disque ne change
+    pas la notation, seul l'extrait (lu sur disque) disparaît."""
+    engine = RustEngine()
+    found = run(engine.search(MARKER, 5, None, None))
+    assert found["results"] and all(r["content_matched"] for r in found["results"])
+    assert all(MARKER in r["snippet"] for r in found["results"])
+    assert found["scanned_files"] >= 2
+
+
+def test_exclusions_et_etat_du_scan(indexed):
+    found = run(RustEngine().search(f"{MARKER}_exclu", 5, None, None))
+    assert all(not r["relative_path"].endswith(".min.js") for r in found["results"])
+
+    status = json.loads(engine_module.scan_status())
+    assert "scan" in status and "generation" in status
+
+    engine_module.rescan_now()
+    for _ in range(40):
+        time.sleep(0.25)
+        if not json.loads(engine_module.scan_status())["scan"].get("running"):
+            break
+    assert json.loads(engine_module.get_stats())["documents_total"] >= 2
+
+
+def _wait_scan():
+    time.sleep(0.3)
+    for _ in range(60):
+        if not json.loads(engine_module.scan_status())["scan"].get("running"):
+            return
+        time.sleep(0.25)
+
+
+def test_exclusion_puis_retrait_reindexe_dans_la_meme_session(indexed):
+    """Une exclusion retire le document de l'index ; la retirer le ré-indexe sans redémarrer."""
+    exclude = __import__("pathlib").Path(os.environ["CODECENTER_EXCLUDE_FILE"])
+    engine = RustEngine()
+    exclude.write_text("*.rs\n")
+    engine_module.rescan_now()
+    _wait_scan()
+    found = run(engine.search(MARKER, 5, None, None))
+    assert {r["language"] for r in found["results"]} == {"python"}
+
+    exclude.write_text("")
+    engine_module.rescan_now()
+    _wait_scan()
+    found = run(engine.search(MARKER, 5, None, None))
+    assert {r["language"] for r in found["results"]} == {"python", "rust"}

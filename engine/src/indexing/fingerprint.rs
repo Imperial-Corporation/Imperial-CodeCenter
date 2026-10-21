@@ -13,6 +13,7 @@ pub fn hash_content(content: &[u8]) -> String {
 }
 
 /// Calcule le SHA-256 d'un fichier.
+#[allow(dead_code)]
 pub fn hash_file(path: &Path) -> io::Result<String> {
     let content = fs::read(path)?;
     Ok(hash_content(&content))

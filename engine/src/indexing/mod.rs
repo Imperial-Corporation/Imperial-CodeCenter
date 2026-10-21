@@ -4,3 +4,4 @@
 pub mod document;
 pub mod fingerprint;
 pub mod health;
+pub mod exclusions;

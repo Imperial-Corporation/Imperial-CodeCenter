@@ -1,12 +1,15 @@
 # Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
 # Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
 #
-# Publication automatique à chaque tag `vX.Y.Z` :
-#   - image Docker multi-architecture (amd64 + arm64) sur ghcr.io, avec attestation de provenance ;
-#   - moteur Rust : wheel Linux + sdist ;
-#   - release GitHub avec les notes extraites du CHANGELOG.
-#
-#   git tag v1.0.3 && git push origin v1.0.3
+# Publication automatique à chaque tag `vX.Y.Z` (créé par ./scripts/tag.sh) :
+#   1. vérification : le tag, le fichier VERSION et tous les fichiers de version concordent ;
+#      les notes de version existent (release-notes/X.Y.Z.md, sinon section du CHANGELOG) ;
+#   2. tests (API, crawler, moteur Rust) ;
+#   3. compilation : wheels du moteur Linux amd64 + arm64 (serveurs, Raspberry Pi…), macOS (universal2)
+#      et Windows (au mieux : un échec n'empêche pas la release), sdist, CLI `icc.pyz`, archive des sources ;
+#   4. image Docker amd64 + arm64 sur ghcr.io (onglet « Packages »), analysée par Trivy, signée par cosign,
+#      avec attestation de provenance et SBOM ;
+#   5. release GitHub créée automatiquement, avec les notes, les binaires et SHA256SUMS.
 
 name: Release
 
@@ -34,9 +37,9 @@ jobs:
           python-version: "3.12"
       - id: v
         run: |
-          python3 scripts/version.py check --tag "$GITHUB_REF_NAME"
+          python3 scripts/version.py check --tag "$GITHUB_REF_NAME" --notes
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
-      - name: Notes de version (section du CHANGELOG)
+      - name: Notes de version (release-notes/X.Y.Z.md ou CHANGELOG)
         run: python3 scripts/version.py notes "${GITHUB_REF_NAME#v}" > release-notes.md
       - uses: actions/upload-artifact@v4
         with:
@@ -57,6 +60,11 @@ jobs:
         working-directory: api
       - run: uv run --with pytest pytest -q -p no:cacheprovider
         working-directory: crawler
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: engine
+      - run: cargo test --manifest-path engine/Cargo.toml --locked
 
   docker:
     name: Image ${{ matrix.platform }}
@@ -96,6 +104,8 @@ jobs:
           build-args: |
             VERSION=${{ needs.verify.outputs.version }}
             REVISION=${{ github.sha }}
+          provenance: false
+          sbom: false
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
@@ -161,31 +171,85 @@ jobs:
           subject-name: ${{ env.IMAGE }}
           subject-digest: ${{ steps.inspect.outputs.digest }}
           push-to-registry: true
+      - name: Analyse des vulnérabilités (Trivy) — échoue sur une faille CRITIQUE corrigeable
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          image-ref: ${{ env.IMAGE }}@${{ steps.inspect.outputs.digest }}
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: SBOM (SPDX)
+        uses: anchore/sbom-action@v0
+        with:
+          image: ${{ env.IMAGE }}@${{ steps.inspect.outputs.digest }}
+          format: spdx-json
+          output-file: sbom.spdx.json
+          upload-artifact: false
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-sbom
+          path: sbom.spdx.json
+      - uses: sigstore/cosign-installer@v3
+      - name: Signature de l'image (cosign, sans clé)
+        run: cosign sign --yes "${IMAGE}@${{ steps.inspect.outputs.digest }}"
 
-  python:
-    name: Moteur Rust (wheel + sdist)
+  wheels:
+    name: Moteur Rust ${{ matrix.name }}
+    needs: [verify, tests]
+    runs-on: ${{ matrix.runner }}
+    continue-on-error: ${{ matrix.best_effort }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { name: "Linux amd64", runner: ubuntu-24.04, target: x86_64, best_effort: false }
+          - { name: "Linux arm64", runner: ubuntu-24.04-arm, target: aarch64, best_effort: false }
+          - { name: "macOS (universal2)", runner: macos-14, target: universal2-apple-darwin, best_effort: true }
+          - { name: "Windows amd64", runner: windows-2022, target: x64, best_effort: true }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          command: build
+          target: ${{ matrix.target }}
+          args: --release --out dist --find-interpreter --manifest-path engine/Cargo.toml
+          manylinux: auto
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-wheels-${{ strategy.job-index }}
+          path: dist/*
+          if-no-files-found: error
+
+  sources:
+    name: Sources, sdist et CLI
     needs: [verify, tests]
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
       - uses: PyO3/maturin-action@v1
         with:
-          command: build
-          args: --release --out dist --find-interpreter --manifest-path engine/Cargo.toml
-          manylinux: auto
-      - uses: PyO3/maturin-action@v1
-        with:
           command: sdist
           args: --out dist --manifest-path engine/Cargo.toml
+      - name: Archive des sources
+        run: |
+          v="${{ needs.verify.outputs.version }}"
+          git archive --format=tar.gz --prefix="Imperial-CodeCenter-${v}/" -o "dist/Imperial-CodeCenter-${v}-sources.tar.gz" HEAD
+      - name: CLI autonome icc.pyz (Python 3.10+, toute architecture)
+        run: |
+          mkdir -p build/icc/icc_ai
+          cp api/src/icc_ai/__init__.py api/src/icc_ai/cli.py api/src/icc_ai/about.py build/icc/icc_ai/
+          python3 -m zipapp build/icc -m "icc_ai.cli:main" -p "/usr/bin/env python3" -o dist/icc.pyz
+          python3 dist/icc.pyz --help >/dev/null
       - uses: actions/upload-artifact@v4
         with:
-          name: python-dist
+          name: dist-sources
           path: dist/*
           if-no-files-found: error
 
   release:
     name: Release GitHub
-    needs: [verify, docker-manifest, python]
+    needs: [verify, docker-manifest, wheels, sources]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -195,8 +259,12 @@ jobs:
           name: release-notes
       - uses: actions/download-artifact@v4
         with:
-          name: python-dist
+          pattern: dist-*
           path: dist
+          merge-multiple: true
+      - name: Sommes de contrôle
+        working-directory: dist
+        run: sha256sum -- * | tee SHA256SUMS
       - uses: softprops/action-gh-release@v2
         with:
           name: Imperial CodeCenter ${{ needs.verify.outputs.version }}

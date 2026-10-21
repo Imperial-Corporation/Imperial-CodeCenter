@@ -12,6 +12,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
+import threading
+from collections import OrderedDict
 from typing import Any, Protocol
 
 from .errors import EngineError
@@ -37,6 +40,14 @@ class EngineGateway(Protocol):
     async def index_health(self) -> dict[str, Any]: ...
 
 
+def _cache_size() -> int:
+    """Entrées du cache de recherche (`CODECENTER_SEARCH_CACHE`, 0 = désactivé)."""
+    try:
+        return max(0, min(5000, int(os.environ.get("CODECENTER_SEARCH_CACHE", "128"))))
+    except ValueError:
+        return 128
+
+
 def _translate(exc: Exception) -> EngineError:
     """Convertit les exceptions Python levées par Rust en EngineError."""
     message = str(exc)
@@ -56,6 +67,8 @@ class RustEngine:
         import codecenter_engine  # import tardif : absent des tests unitaires
 
         self._engine = codecenter_engine
+        self._cache: OrderedDict[tuple, str] = OrderedDict()
+        self._cache_lock = threading.Lock()
 
     async def _call(self, function, *args) -> dict[str, Any]:
         try:
@@ -64,8 +77,42 @@ class RustEngine:
         except (ValueError, LookupError, PermissionError, RuntimeError) as exc:
             raise _translate(exc) from exc
 
+    def _generation(self) -> int | None:
+        """Compteur qui change à chaque modification de l'index (None : moteur plus ancien)."""
+        try:
+            return int(json.loads(self._engine.scan_status()).get("generation", 0))
+        except Exception:
+            return None
+
     async def search(self, query, limit, language, category):
-        return await self._call(self._engine.search, query, limit, language, category)
+        """Recherche, avec un petit cache invalidé dès que l'index change."""
+        size = _cache_size()
+        generation = self._generation() if size else None
+        if generation is None:
+            return await self._call(self._engine.search, query, limit, language, category)
+        key = (generation, query.strip().lower(), limit, language, category)
+        with self._cache_lock:
+            raw = self._cache.get(key)
+            if raw is not None:
+                self._cache.move_to_end(key)
+        if raw is None:
+            try:
+                raw = await asyncio.to_thread(self._engine.search, query, limit, language, category)
+            except (ValueError, LookupError, PermissionError, RuntimeError) as exc:
+                raise _translate(exc) from exc
+            with self._cache_lock:
+                self._cache[key] = raw
+                while len(self._cache) > size:
+                    self._cache.popitem(last=False)
+        return json.loads(raw)
+
+    async def scan_status(self) -> dict[str, Any]:
+        """État du passage d'indexation en cours (compteurs, durée, génération de l'index)."""
+        return await self._call(self._engine.scan_status)
+
+    def rescan(self) -> None:
+        """Demande un passage d'indexation immédiat."""
+        self._engine.rescan_now()
 
     async def get_document(self, document_id, start_line=None, end_line=None, max_bytes=None):
         return await self._call(

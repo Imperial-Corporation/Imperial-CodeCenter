@@ -55,9 +55,10 @@
 
     function formatBytes(bytes) {
         if (!Number.isFinite(bytes)) return "—";
-        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} Ko`;
-        if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} Mo`;
-        return `${(bytes / 1024 ** 3).toFixed(2)} Go`;
+        const en = ICC.i18n && ICC.i18n.lang() === "en";
+        if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} ${en ? "KB" : "Ko"}`;
+        if (bytes < 1024 ** 3) return `${(bytes / 1024 ** 2).toFixed(1)} ${en ? "MB" : "Mo"}`;
+        return `${(bytes / 1024 ** 3).toFixed(2)} ${en ? "GB" : "Go"}`;
     }
 
     function formatDuration(seconds) {
@@ -71,7 +72,7 @@
     function formatDate(iso) {
         if (!iso) return "—";
         const date = new Date(iso);
-        return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString("fr-FR");
+        return Number.isNaN(date.getTime()) ? "—" : date.toLocaleString(ICC.i18n && ICC.i18n.lang() === "en" ? "en-GB" : "fr-FR");
     }
 
     // <input type="datetime-local"> donne une heure locale du navigateur : on la

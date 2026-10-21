@@ -5,6 +5,24 @@
 # Démarrage du conteneur : clé de chiffrement persistante, attente de
 # PostgreSQL, migrations (une seule fois chacune), scripts d'exemple, puis l'API.
 set -eu
+
+# Secrets Docker / Podman / Kubernetes : NOM_FILE=/run/secrets/x lit la valeur dans le fichier
+# (une variable déjà définie directement reste prioritaire). Liste fermée, pas de génériques.
+for name in DATABASE_URL CODECENTER_ADMIN_TOKEN CODECENTER_SECRET_KEY CODECENTER_METRICS_TOKEN \
+    CODECENTER_BACKUP_PASSPHRASE GITHUB_TOKEN; do
+    file_var="${name}_FILE"
+    eval "file_path=\${$file_var:-}"
+    eval "current=\${$name:-}"
+    if [ -n "$file_path" ] && [ -z "$current" ]; then
+        if [ ! -r "$file_path" ]; then
+            echo "$file_var : fichier illisible ($file_path)." >&2
+            exit 1
+        fi
+        value="$(cat "$file_path")"
+        export "$name=$value"
+    fi
+done
+
 export PGOPTIONS="${PGOPTIONS:-} -c client_min_messages=warning"
 
 DATA="${CODECENTER_DATA_DIR:-/data}"

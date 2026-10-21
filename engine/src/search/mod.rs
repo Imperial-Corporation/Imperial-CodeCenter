@@ -10,6 +10,7 @@
 pub mod paths;
 pub mod text;
 
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use std::time::Instant;
 
@@ -17,7 +18,7 @@ use serde::Serialize;
 use sqlx::Row;
 use uuid::Uuid;
 
-use crate::database::{get_pool, runtime};
+use crate::database::{content, get_pool, runtime};
 use crate::indexing::fingerprint::hash_content;
 
 use paths::{relative_display, resolve_in_roots, watch_roots, PathError};
@@ -107,6 +108,7 @@ struct Candidate {
     storage_path: String,
     file_size: i64,
     sha256: String,
+    has_content: bool,
     language: String,
     language_name: String,
     categories: Vec<String>,
@@ -175,7 +177,20 @@ async fn run_search(
     let roots = watch_roots()?;
     let pool = get_pool().await?;
 
-    let rows = sqlx::query(
+    // Index de contenu (migration 004) : le contenu est noté depuis PostgreSQL au
+    // lieu d'être relu sur le disque ; sans lui, comportement d'avant la 1.0.4.
+    let use_index = content::available(pool).await;
+    let (content_join, content_flag, content_group) = if use_index {
+        (
+            "LEFT JOIN code_content cc ON cc.code_example_id = ce.id",
+            "(cc.code_example_id IS NOT NULL)",
+            ", cc.code_example_id",
+        )
+    } else {
+        ("", "FALSE", "")
+    };
+
+    let sql = format!(
         r#"
         SELECT
             ce.id,
@@ -183,11 +198,12 @@ async fn run_search(
             ce.storage_path,
             ce.file_size,
             ce.content_sha256,
+            {content_flag} AS has_content,
             COALESCE(l.slug, '')  AS language,
             COALESCE(l.name, '')  AS language_name,
             COALESCE(
                 ARRAY_AGG(DISTINCT c.name) FILTER (WHERE c.id IS NOT NULL),
-                '{}'
+                '{{}}'
             ) AS categories,
             (
                 SELECT ca.summary
@@ -200,6 +216,7 @@ async fn run_search(
         LEFT JOIN languages l ON l.id = ce.language_id
         LEFT JOIN code_example_categories cec ON cec.code_example_id = ce.id
         LEFT JOIN categories c ON c.id = cec.category_id
+        {content_join}
         WHERE ($1::TEXT IS NULL OR l.slug = $1)
           AND (
               $2::TEXT IS NULL OR EXISTS (
@@ -209,16 +226,18 @@ async fn run_search(
                   WHERE x.code_example_id = ce.id AND xc.slug = $2
               )
           )
-        GROUP BY ce.id, l.slug, l.name
+        GROUP BY ce.id, l.slug, l.name{content_group}
         ORDER BY ce.updated_at DESC
         LIMIT $3
-        "#,
-    )
-    .bind(language.as_deref())
-    .bind(category.as_deref())
-    .bind(MAX_CANDIDATES)
-    .fetch_all(pool)
-    .await?;
+        "#
+    );
+
+    let rows = sqlx::query(&sql)
+        .bind(language.as_deref())
+        .bind(category.as_deref())
+        .bind(MAX_CANDIDATES)
+        .fetch_all(pool)
+        .await?;
 
     let mut candidates: Vec<Candidate> = Vec::with_capacity(rows.len());
 
@@ -244,6 +263,7 @@ async fn run_search(
             storage_path,
             file_size: row.try_get("file_size")?,
             sha256: row.try_get("content_sha256")?,
+            has_content: row.try_get("has_content")?,
             language,
             language_name: row.try_get("language_name")?,
             categories,
@@ -262,21 +282,68 @@ async fn run_search(
             .unwrap_or(std::cmp::Ordering::Equal)
     });
 
+    let max_scan_bytes = max_scan_bytes();
     let mut scanned_files = 0usize;
     let mut scanned_bytes = 0u64;
     let mut truncated = false;
-    let mut hits: Vec<Hit> = Vec::new();
+
+    // --- Contenu déjà dans l'index : notation par lots, sans toucher au disque ---
+    let mut indexed_points: HashMap<Uuid, f64> = HashMap::new();
+    if use_index {
+        let indexed_ids: Vec<Uuid> = candidates
+            .iter()
+            .filter(|c| c.has_content && c.file_size >= 0 && (c.file_size as u64) <= MAX_FILE_BYTES)
+            .map(|c| c.id)
+            .collect();
+        let patterns: Vec<String> = terms.iter().map(|t| content::like_contains(t)).collect();
+        let matched: HashSet<Uuid> = content::matching_ids(pool, &indexed_ids, &patterns)
+            .await?
+            .into_iter()
+            .collect();
+
+        // Dans l'ordre des candidats : si un plafond est atteint, les meilleurs sont notés.
+        let ordered: Vec<Uuid> = candidates
+            .iter()
+            .filter(|c| matched.contains(&c.id))
+            .map(|c| c.id)
+            .collect();
+
+        'batches: for batch in ordered.chunks(100) {
+            for (id, lowered) in content::contents(pool, batch).await? {
+                if scanned_files >= MAX_SCAN_FILES || scanned_bytes >= max_scan_bytes {
+                    truncated = true;
+                    break 'batches;
+                }
+                scanned_files += 1;
+                scanned_bytes += lowered.len() as u64;
+                let points = text::content_score(&terms, query, &lowered);
+                if points > 0.0 {
+                    indexed_points.insert(id, points);
+                }
+            }
+        }
+    }
+
+    // `path` : renseigné quand l'extrait reste à lire sur le disque (résultats retenus seulement).
+    let mut pending: Vec<(Hit, Option<std::path::PathBuf>)> = Vec::new();
 
     for candidate in candidates {
         let mut score = candidate.meta_score;
         let mut snippet = None;
         let mut content_matched = false;
+        let mut deferred = false;
 
         let readable = candidate.file_size >= 0
             && (candidate.file_size as u64) <= MAX_FILE_BYTES;
 
-        if readable {
-            if scanned_files >= MAX_SCAN_FILES || scanned_bytes >= MAX_SCAN_BYTES {
+        if use_index && candidate.has_content && readable {
+            if let Some(points) = indexed_points.get(&candidate.id) {
+                score += points;
+                content_matched = true;
+            }
+            deferred = score > 0.0;
+        } else if readable {
+            if scanned_files >= MAX_SCAN_FILES || scanned_bytes >= max_scan_bytes {
                 truncated = true;
             } else if let Ok((path, _)) =
                 resolve_in_roots(&candidate.storage_path, &roots)
@@ -306,41 +373,68 @@ async fn run_search(
             continue;
         }
 
-        let snippet = snippet.unwrap_or(text::Snippet {
-            line_start: 1,
-            line_end: 1,
-            text: String::new(),
-        });
+        let resolved = resolve_in_roots(&candidate.storage_path, &roots).ok();
 
-        let relative_path = resolve_in_roots(&candidate.storage_path, &roots)
-            .map(|(path, root)| relative_display(&path, &root))
-            .unwrap_or_else(|_| candidate.title.clone());
+        let (snippet_value, path_for_snippet) = match snippet {
+            Some(value) => (value, None),
+            None => (
+                text::Snippet {
+                    line_start: 1,
+                    line_end: 1,
+                    text: String::new(),
+                },
+                if deferred { resolved.as_ref().map(|(p, _)| p.clone()) } else { None },
+            ),
+        };
 
-        hits.push(Hit {
-            document_id: candidate.id.to_string(),
-            title: candidate.title,
-            relative_path,
-            language: candidate.language,
-            language_name: candidate.language_name,
-            categories: candidate.categories,
-            score: (score * 100.0).round() / 100.0,
-            file_size: candidate.file_size,
-            content_sha256: candidate.sha256,
-            summary: candidate.summary,
-            line_start: snippet.line_start,
-            line_end: snippet.line_end,
-            snippet: snippet.text,
-            content_matched,
-        });
+        let relative_path = resolved
+            .as_ref()
+            .map(|(path, root)| relative_display(path, root))
+            .unwrap_or_else(|| candidate.title.clone());
+
+        pending.push((
+            Hit {
+                document_id: candidate.id.to_string(),
+                title: candidate.title,
+                relative_path,
+                language: candidate.language,
+                language_name: candidate.language_name,
+                categories: candidate.categories,
+                score: (score * 100.0).round() / 100.0,
+                file_size: candidate.file_size,
+                content_sha256: candidate.sha256,
+                summary: candidate.summary,
+                line_start: snippet_value.line_start,
+                line_end: snippet_value.line_end,
+                snippet: snippet_value.text,
+                content_matched,
+            },
+            path_for_snippet,
+        ));
     }
 
-    hits.sort_by(|a, b| {
-        b.score
-            .partial_cmp(&a.score)
+    pending.sort_by(|a, b| {
+        b.0.score
+            .partial_cmp(&a.0.score)
             .unwrap_or(std::cmp::Ordering::Equal)
-            .then_with(|| a.title.cmp(&b.title))
+            .then_with(|| a.0.title.cmp(&b.0.title))
     });
-    hits.truncate(limit);
+    pending.truncate(limit);
+
+    // Extraits : seuls les résultats retenus (50 au plus) sont lus sur le disque.
+    let mut hits: Vec<Hit> = Vec::with_capacity(pending.len());
+    for (mut hit, path) in pending {
+        if let Some(path) = path {
+            if let Ok(bytes) = std::fs::read(&path) {
+                let content = String::from_utf8_lossy(&bytes);
+                let snippet = text::best_snippet(&content, &terms);
+                hit.line_start = snippet.line_start;
+                hit.line_end = snippet.line_end;
+                hit.snippet = snippet.text;
+            }
+        }
+        hits.push(hit);
+    }
 
     Ok(SearchOutput {
         took_ms: started.elapsed().as_millis() as u64,
@@ -350,6 +444,17 @@ async fn run_search(
         truncated,
         results: hits,
     })
+}
+
+/// Volume maximal analysé par recherche (octets) : 96 Mio, ou
+/// `CODECENTER_SEARCH_SCAN_MB` (profil léger : moins de mémoire).
+fn max_scan_bytes() -> u64 {
+    std::env::var("CODECENTER_SEARCH_SCAN_MB")
+        .ok()
+        .and_then(|value| value.trim().parse::<u64>().ok())
+        .filter(|value| *value >= 1)
+        .map(|mb| mb.saturating_mul(1024 * 1024))
+        .unwrap_or(MAX_SCAN_BYTES)
 }
 
 #[derive(Debug, Serialize)]

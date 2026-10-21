@@ -1,0 +1,30 @@
+# Imperial CodeCenter — https://imperial-corporation.pages.dev/icc
+# Copyright (c) Imperial. Imperial Community License 1.0 (voir LICENSE) : gratuit, code ouvert, origine à conserver.
+#
+# PostgreSQL pour CodeCenter (Podman Quadlet, sans root possible : ~/.config/containers/systemd/).
+# Mot de passe : podman secret create icc_db_password -   (puis saisir le mot de passe, Ctrl+D)
+[Unit]
+Description=Imperial CodeCenter - base PostgreSQL
+
+[Container]
+ContainerName=icc-db
+Image=docker.io/library/postgres:16-alpine
+Network=icc.network
+Volume=icc-db.volume:/var/lib/postgresql/data
+Environment=POSTGRES_USER=codecenter
+Environment=POSTGRES_DB=imperial_codecenter
+Secret=icc_db_password,type=env,target=POSTGRES_PASSWORD
+HealthCmd=pg_isready -U codecenter -d imperial_codecenter
+HealthInterval=5s
+HealthRetries=20
+NoNewPrivileges=true
+# Profil léger (décommente pour une petite machine) :
+# Exec=postgres -c max_connections=20 -c shared_buffers=64MB -c work_mem=2MB -c synchronous_commit=off -c wal_compression=on -c checkpoint_timeout=15min
+# Memory=384m
+
+[Service]
+Restart=always
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

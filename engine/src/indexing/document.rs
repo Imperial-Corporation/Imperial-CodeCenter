@@ -268,7 +268,7 @@ fn is_ignored_path(path: &Path) -> bool {
             .file_name()
             .and_then(|name| name.to_str())
             .is_some_and(|name| name == "_depot" || name == ".crawler")
-    })
+    }) || super::exclusions::is_excluded(path)
 }
 
 /// Indexe un fichier, le range par langage et synchronise PostgreSQL.
@@ -299,8 +299,15 @@ pub async fn index_file(
 
     let organized_path = organize_or_keep(path, &language, &content_sha256)?;
 
-    let content = fs::read(&organized_path)?;
-    let content_sha256 = hash_content(&content);
+    // Fichier resté en place : inutile de le relire (et de le hacher) une seconde fois,
+    // ce qui compte sur un disque lent.
+    let (content, content_sha256) = if path.canonicalize().ok().as_deref() == Some(organized_path.as_path()) {
+        (original_content, content_sha256)
+    } else {
+        let content = fs::read(&organized_path)?;
+        let sha = hash_content(&content);
+        (content, sha)
+    };
     let file_size = i64::try_from(content.len())?;
 
     let storage_path = organized_path.to_string_lossy().into_owned();
@@ -323,6 +330,21 @@ pub async fn index_file(
     )
     .await
     .map_err(|error| Box::new(error) as Box<dyn Error + Send + Sync>)?;
+
+    // Index de contenu et signature persistante : un échec ne doit jamais empêcher
+    // l'indexation (la recherche retombe alors sur la lecture du disque).
+    if let Some((mtime, _)) = health::signature(&organized_path) {
+        if let Err(error) = crate::database::content::store_content(
+            &storage_path,
+            &content_sha256,
+            &content,
+            i64::try_from(mtime).unwrap_or(0),
+        )
+        .await
+        {
+            eprintln!("CodeCenter : index de contenu non mis à jour pour {storage_path} : {error}");
+        }
+    }
 
     health::record_success(path, &organized_path);
     Ok(result)

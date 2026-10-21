@@ -104,7 +104,7 @@
         }
 
         async function remove(chat) {
-            if (!window.confirm(`Supprimer définitivement « ${chat.title} » ?`)) return;
+            if (!window.confirm(ICC.i18n ? ICC.i18n.t(`Supprimer définitivement « ${chat.title} » ?`) : `Supprimer définitivement « ${chat.title} » ?`)) return;
             try {
                 await ICC.services.deleteChat(chat.id);
             } catch (error) {

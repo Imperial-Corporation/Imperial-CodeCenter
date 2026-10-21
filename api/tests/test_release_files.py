@@ -44,7 +44,8 @@ def test_notes_de_version_extraites_du_changelog(capsys):
     version = read("VERSION").strip()
     assert script.notes(version) == 0
     out = capsys.readouterr().out
-    assert out.strip() and not out.startswith("##") and "## " not in out
+    # pas de titre de niveau 2 : la release GitHub a déjà son titre (les sous-titres « ### » sont permis)
+    assert out.strip() and not any(line.startswith("## ") for line in out.splitlines())
     assert script.notes("0.0.1") == 1
 
 
@@ -142,3 +143,58 @@ def test_ci_teste_tout():
     for needle in ("pytest", "cargo test", "scripts/version.py check", "add_license_headers.py --check",
                    "docker compose up", "test_integration_engine", "cmp LICENSE engine/LICENSE"):
         assert needle in text, needle
+
+
+def test_notes_depuis_un_fichier_prioritaires_et_sans_commentaire(tmp_path, monkeypatch):
+    script = _load_version_script()
+    monkeypatch.setattr(script, "ROOT", tmp_path)
+    (tmp_path / "release-notes").mkdir()
+    (tmp_path / "CHANGELOG.md").write_text("# Changelog\n\n## 9.9.9\nvia changelog\n")
+    assert script.release_notes("9.9.9") == "via changelog"
+    (tmp_path / "release-notes" / "9.9.9.md").write_text("<!-- modèle -->\nvia fichier\n")
+    assert script.release_notes("9.9.9") == "via fichier"
+    (tmp_path / "release-notes" / "9.9.9.md").write_text("<!-- seulement un commentaire -->\n")
+    assert script.release_notes("9.9.9") == "via changelog"  # fichier vide : repli sur le CHANGELOG
+    assert script.release_notes("1.2.3") is None
+
+
+def test_notes_de_la_version_courante_existent():
+    script = _load_version_script()
+    assert script.release_notes(read("VERSION").strip())
+    assert script.check(None, need_notes=True) == 0
+
+
+def test_tag_sh_valide_la_version_sans_rien_modifier():
+    import subprocess
+
+    script = ROOT / "scripts" / "tag.sh"
+    assert script.stat().st_mode & 0o111
+    assert subprocess.run(["bash", "-n", str(script)]).returncode == 0
+    if not (ROOT / ".git").exists():
+        pytest.skip("dépôt Git absent (archive) : seul le contrôle de syntaxe est possible")
+    refused = subprocess.run(["bash", str(script), "9.9.9", "--dry-run"], cwd=ROOT, capture_output=True, text=True)
+    assert refused.returncode != 0  # version différente du fichier VERSION : refus sans rien modifier
+
+
+def test_release_publie_amd64_arm64_et_cree_la_release():
+    text = read(".github/workflows/release.yml")
+    for needle in ("ubuntu-24.04-arm", "x86_64", "aarch64", "cosign sign", "trivy-action", "sbom",
+                   "SHA256SUMS", "softprops/action-gh-release", "release-notes", "icc.pyz", "--notes"):
+        assert needle in text, needle
+
+
+def test_variantes_compose_sont_du_yaml_valide():
+    yaml = pytest.importorskip("yaml")
+    for name in ("compose.lite.yaml", "compose.secrets.yaml"):
+        data = yaml.safe_load(read(name))
+        assert "services" in data
+    lite = yaml.safe_load(read("compose.lite.yaml"))
+    assert "synchronous_commit=off" in lite["services"]["db"]["command"]
+    assert lite["services"]["app"]["environment"]["CODECENTER_PROFILE"].startswith("${ICC_PROFILE")
+
+
+def test_entrypoint_lit_les_secrets_en_fichier():
+    text = read("docker/entrypoint.sh")
+    for name in ("DATABASE_URL", "CODECENTER_ADMIN_TOKEN", "CODECENTER_SECRET_KEY", "GITHUB_TOKEN"):
+        assert name in text
+    assert "_FILE" in text and "CODECENTER_SECRET_KEY_FILE" in text  # l'ancien fichier de clé est conservé

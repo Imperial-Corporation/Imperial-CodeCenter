@@ -3,7 +3,7 @@
 
 [package]
 name = "codecenter-engine"
-version = "1.0.3"
+version = "1.0.4"
 edition = "2024"
 license-file = "LICENSE"
 authors = ["Imperial <https://imperial-corporation.pages.dev/icc>"]

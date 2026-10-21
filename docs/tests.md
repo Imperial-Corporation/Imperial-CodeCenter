@@ -1,9 +1,9 @@
 # Tests
 
 ```bash
-cd api     && uv sync && uv run pytest      # 639 tests (4 d'intégration ignorés sans base)
+cd api     && uv sync && uv run pytest      # ≈ 690 tests (les tests d'intégration sont ignorés sans base)
 cd crawler && uv run pytest                  # 256 tests
-cd engine  && cargo test                     # 23 tests
+cd engine  && cargo test                     # 33 tests
 ```
 
 Intégration réelle (moteur + PostgreSQL de test, la table `code_examples` est vidée) :
@@ -14,3 +14,13 @@ cd ../api && ICC_TEST_DATABASE_URL=postgresql://user@127.0.0.1:5432/base_test uv
 ```
 
 Les fournisseurs IA et GitHub sont simulés : aucun test n'appelle un vrai service. Vérifications faites en plus à la main pendant le développement : parcours complet dans un navigateur (Playwright) avec un faux fournisseur : discussion, comptes, enregistrement, réouverture, barre latérale, mobile, scénario de permissions (service non-root, dossier `root:root 775`), `nginx -t`.
+
+## Tests de bout en bout (interface)
+
+Neuf scénarios Playwright (Chromium) vérifient l'interface réelle avec une API simulée : connexion, recherche,
+bascule FR/EN, panneau d'administration, jetons. Ils s'exécutent dans la CI (job « e2e »).
+
+```bash
+cd e2e && pip install playwright pytest && playwright install chromium
+PYTHONPATH=../api/src python -m pytest .
+```

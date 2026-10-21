@@ -10,3 +10,12 @@
 - Le contenu des fichiers est traité comme donnée dans le prompt (réduit, sans éliminer, le risque d'injection).
 - Proxy : en-têtes `X-Forwarded-*` crus uniquement des proxys de confiance ; origine verrouillable aux IP Cloudflare.
 - Le service tourne sous un compte dédié, `UMask=0002`.
+
+## 1.0.4
+
+- **Jetons d'API** : l'empreinte seule est en base ; la clé de données du compte y est enveloppée par le jeton (comme une session). Ils n'ouvrent ni la gestion du compte, ni l'administration ; ils sont révoqués avec la désactivation ou la réinitialisation du compte.
+- **Administration** : cookie de session ou `CODECENTER_ADMIN_TOKEN` uniquement ; le compte administrateur est protégé contre sa propre désactivation/suppression ; la réinitialisation d'un mot de passe efface les clés chiffrées du compte (l'administrateur ne peut jamais les lire).
+- **Sauvegardes** : instantané SQLite cohérent, chiffrement AES-256-GCM par blocs (scrypt) avec phrase secrète, dossier en `0700` et fichiers en `0600`, restauration qui valide le manifeste et refuse chemins et liens suspects avant d'écrire. Une sauvegarde sans phrase secrète est sensible.
+- **Métriques** : jeton dédié, comparaison en temps constant ; `CODECENTER_METRICS_PUBLIC` seulement sur réseau privé.
+- **Chaîne de publication** : scan Trivy, signature cosign sans clé, attestation de provenance, SBOM, CodeQL, Dependabot.
+- **Conteneur** : secrets par fichier (`*_FILE`), Podman rootless possible.
