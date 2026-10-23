@@ -41,6 +41,6 @@ Fichier : `config/.env` (développement) ou `/etc/imperial-codecenter/.env` (pro
 | `CODECENTER_EXCLUDE` / `CODECENTER_EXCLUDE_FILE` | — / `<données>/exclude.txt` | motifs d'exclusion de l'index ([administration.md](administration.md)) |
 | `CODECENTER_BACKUP_EVERY_HOURS` / `_KEEP` / `_PASSPHRASE` / `_CODES` | 0 / 7 / — / 0 | sauvegardes planifiées ([sauvegardes.md](sauvegardes.md)) |
 | `CODECENTER_METRICS_TOKEN` / `CODECENTER_METRICS_PUBLIC` | — / 0 | accès à `/metrics` |
-| `NOM_FILE` | — | secrets lus dans un fichier (Docker) pour `DATABASE_URL`, `CODECENTER_ADMIN_TOKEN`, `CODECENTER_SECRET_KEY`, `CODECENTER_METRICS_TOKEN`, `CODECENTER_BACKUP_PASSPHRASE`, `GITHUB_TOKEN` |
+| `NOM_FILE` | — | secrets lus dans un fichier (Docker) pour `DATABASE_URL`, `CODECENTER_ADMIN_TOKEN`, `CODECENTER_METRICS_TOKEN`, `CODECENTER_BACKUP_PASSPHRASE`, `GITHUB_TOKEN` |
 | `ICC_PROFILE`, `ICC_VERSION`, `ICC_BIND`, `ICC_PORT` | — | variables du `compose` |
 | `ICC_URL`, `ICC_TOKEN`, `ICC_BACKUP_PASSPHRASE` | — | CLI `icc` ([cli-mcp.md](cli-mcp.md)) et sauvegardes en ligne de commande |

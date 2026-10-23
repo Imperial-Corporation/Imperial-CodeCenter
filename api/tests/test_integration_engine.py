@@ -54,9 +54,13 @@ def indexed(tmp_path_factory):
 
     engine_module.start_watcher()
     try:
-        for _ in range(40):
-            time.sleep(0.5)
-            if json.loads(engine_module.get_stats())["documents_total"] >= 2:
+        for _ in range(80):  # attendre NOS deux fichiers (la base peut contenir d'anciens documents)
+            time.sleep(0.25)
+            try:
+                found = run(RustEngine().search(MARKER, 5, None, None))
+            except Exception:
+                continue
+            if {r["language"] for r in found["results"]} >= {"python", "rust"}:
                 break
         yield root
     finally:

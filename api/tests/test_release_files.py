@@ -195,6 +195,31 @@ def test_variantes_compose_sont_du_yaml_valide():
 
 def test_entrypoint_lit_les_secrets_en_fichier():
     text = read("docker/entrypoint.sh")
-    for name in ("DATABASE_URL", "CODECENTER_ADMIN_TOKEN", "CODECENTER_SECRET_KEY", "GITHUB_TOKEN"):
+    for name in ("DATABASE_URL", "CODECENTER_ADMIN_TOKEN", "CODECENTER_METRICS_TOKEN", "GITHUB_TOKEN"):
         assert name in text
-    assert "_FILE" in text and "CODECENTER_SECRET_KEY_FILE" in text  # l'ancien fichier de clé est conservé
+    assert "_FILE" in text and "KEY_FILE" in text  # le fichier de clé garde sa propre logique
+
+
+def test_premier_demarrage_sans_fichier_de_cle_ne_s_arrete_pas_sur_la_cle(tmp_path):
+    """Régression CI : CODECENTER_SECRET_KEY_FILE (défaut du Dockerfile) n'existe pas encore au 1er démarrage."""
+    import os
+    import subprocess
+
+    env = {**os.environ, "CODECENTER_SECRET_KEY_FILE": str(tmp_path / "absent.key"),
+           "CODECENTER_DATA_DIR": str(tmp_path)}
+    env.pop("DATABASE_URL", None)
+    out = subprocess.run(["sh", str(ROOT / "docker" / "entrypoint.sh"), "true"], env=env,
+                         capture_output=True, text=True)
+    assert "absent.key" not in out.stderr and "illisible" not in out.stderr
+    assert "DATABASE_URL est requis" in out.stderr  # on arrive bien jusqu'au contrôle suivant
+
+
+def test_entrypoint_secret_en_fichier_illisible_arrete_avec_message(tmp_path):
+    import os
+    import subprocess
+
+    env = {**os.environ, "ICC_DUMMY": "1", "CODECENTER_ADMIN_TOKEN_FILE": str(tmp_path / "nope")}
+    env.pop("CODECENTER_ADMIN_TOKEN", None)
+    out = subprocess.run(["sh", str(ROOT / "docker" / "entrypoint.sh"), "true"], env=env,
+                         capture_output=True, text=True)
+    assert out.returncode == 1 and "CODECENTER_ADMIN_TOKEN_FILE" in out.stderr

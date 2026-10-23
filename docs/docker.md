@@ -95,7 +95,7 @@ Réglages PostgreSQL pour peu de mémoire et disques lents, limites mémoire/CPU
 docker compose -f compose.yaml -f compose.secrets.yaml up -d      # voir l'en-tête du fichier
 ```
 
-Le conteneur lit `NOM_FILE` pour : `DATABASE_URL`, `CODECENTER_ADMIN_TOKEN`, `CODECENTER_SECRET_KEY`, `CODECENTER_METRICS_TOKEN`, `CODECENTER_BACKUP_PASSPHRASE`, `GITHUB_TOKEN` (une variable déjà définie directement reste prioritaire ; fichier illisible = arrêt avec un message clair). Compatible Docker secrets, Swarm et Kubernetes. Alternative sans compose : [podman.md](podman.md).
+Le conteneur lit `NOM_FILE` pour : `DATABASE_URL`, `CODECENTER_ADMIN_TOKEN`, `CODECENTER_METRICS_TOKEN`, `CODECENTER_BACKUP_PASSPHRASE`, `GITHUB_TOKEN` (une variable déjà définie directement reste prioritaire ; fichier illisible = arrêt avec un message clair). Compatible Docker secrets, Swarm et Kubernetes. Alternative sans compose : [podman.md](podman.md).
 
 ## Sauvegarde intégrée
 

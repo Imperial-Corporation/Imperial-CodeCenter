@@ -8,7 +8,9 @@ set -eu
 
 # Secrets Docker / Podman / Kubernetes : NOM_FILE=/run/secrets/x lit la valeur dans le fichier
 # (une variable déjà définie directement reste prioritaire). Liste fermée, pas de génériques.
-for name in DATABASE_URL CODECENTER_ADMIN_TOKEN CODECENTER_SECRET_KEY CODECENTER_METRICS_TOKEN \
+# CODECENTER_SECRET_KEY n'en fait PAS partie : CODECENTER_SECRET_KEY_FILE est déjà lue par l'API
+# et, par défaut (/data/secret.key), le fichier n'existe pas encore au premier démarrage.
+for name in DATABASE_URL CODECENTER_ADMIN_TOKEN CODECENTER_METRICS_TOKEN \
     CODECENTER_BACKUP_PASSPHRASE GITHUB_TOKEN; do
     file_var="${name}_FILE"
     eval "file_path=\${$file_var:-}"
