@@ -203,17 +203,23 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { name: "Linux amd64", runner: ubuntu-24.04, target: x86_64, best_effort: false }
-          - { name: "Linux arm64", runner: ubuntu-24.04-arm, target: aarch64, best_effort: false }
-          - { name: "macOS (universal2)", runner: macos-14, target: universal2-apple-darwin, best_effort: true }
-          - { name: "Windows amd64", runner: windows-2022, target: x64, best_effort: true }
+          - { name: "Linux amd64", runner: ubuntu-24.04, target: x86_64, best_effort: false, interpreter: "--find-interpreter" }
+          - { name: "Linux arm64", runner: ubuntu-24.04-arm, target: aarch64, best_effort: false, interpreter: "--find-interpreter" }
+          # macOS / Windows : les runners embarquent parfois un Python plus récent que ce que PyO3 accepte
+          # (ex. 3.15 avec PyO3 0.27) ; on fige donc l'interpréteur sur Python 3.12.
+          - { name: "macOS (universal2)", runner: macos-14, target: universal2-apple-darwin, best_effort: true, interpreter: "--interpreter python" }
+          - { name: "Windows amd64", runner: windows-2022, target: x64, best_effort: true, interpreter: "--interpreter python" }
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        if: runner.os != 'Linux'
+        with:
+          python-version: "3.12"
       - uses: PyO3/maturin-action@v1
         with:
           command: build
           target: ${{ matrix.target }}
-          args: --release --out dist --find-interpreter --manifest-path engine/Cargo.toml
+          args: --release --out dist ${{ matrix.interpreter }} --manifest-path engine/Cargo.toml
           manylinux: auto
       - uses: actions/upload-artifact@v4
         with:
