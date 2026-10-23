@@ -223,3 +223,11 @@ def test_entrypoint_secret_en_fichier_illisible_arrete_avec_message(tmp_path):
     out = subprocess.run(["sh", str(ROOT / "docker" / "entrypoint.sh"), "true"], env=env,
                          capture_output=True, text=True)
     assert out.returncode == 1 and "CODECENTER_ADMIN_TOKEN_FILE" in out.stderr
+
+
+def test_trivy_action_epingle_sur_une_version_saine():
+    """Les anciennes étiquettes sans « v » (≤ 0.34.2) ont été détournées puis supprimées en mars 2026."""
+    m = re.search(r"aquasecurity/trivy-action@(\S+)", read(".github/workflows/release.yml"))
+    assert m and m.group(1).startswith("v")
+    major, minor = (int(x) for x in m.group(1)[1:].split(".")[:2])
+    assert (major, minor) >= (0, 35)
