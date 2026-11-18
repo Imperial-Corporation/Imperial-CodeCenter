@@ -26,13 +26,16 @@ services:
       - no-new-privileges:true
 
   app:
-    # Image publiée par GitHub Actions ; `docker compose build` la reconstruit depuis les sources.
     image: ghcr.io/imperial-corporation/imperial-codecenter:${ICC_VERSION:-latest}
     build:
       context: .
       args:
         VERSION: ${ICC_VERSION:-dev}
     restart: unless-stopped
+
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
     depends_on:
       db:
         condition: service_healthy

@@ -71,13 +71,13 @@ PROVIDERS: dict[str, ProviderSpec] = {
     for spec in (
         ProviderSpec(
             "ollama", "Ollama", "local", "ollama", False,
-            "http://127.0.0.1:11434", "llama3.1", "#5eead4", "Ol",
+            "http://host.docker.internal:11434", "llama3.1", "#5eead4", "Ol",
             default_context_window=8192,
             notes="API native d'Ollama. Le modèle doit gérer les outils pour les utiliser.",
         ),
         ProviderSpec(
             "omniroute", "OmniRoute", "local", "openai", False,
-            "http://127.0.0.1:20128/v1", "", "#a78bfa", "Om",
+            "http://host.docker.internal:20128/v1", "", "#a78bfa", "Om",
             notes="Passerelle locale compatible OpenAI. Clé API facultative.",
         ),
         ProviderSpec(
