@@ -30,6 +30,10 @@ Composants tiers
   la mention de leurs auteurs (voir le manifeste de provenance du collecteur).
   Les 66 scripts de examples/ font partie du Logiciel et suivent la licence.
 
+Icônes de l'interface (frontend/scripts/icons.js)
+  Sous-ensemble de la bibliothèque Lucide (https://lucide.dev), licence ISC,
+  Copyright (c) les contributeurs de Lucide ; formes embarquées localement.
+
 Équipe Imperial (article 5.8 de la licence)
   Le créateur du Logiciel et les membres de l'équipe Imperial Corporation sont
   un cas particulier : les obligations de code ouvert, de gratuité et de

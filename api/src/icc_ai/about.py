@@ -6,7 +6,7 @@
 from __future__ import annotations
 
 NAME = "Imperial CodeCenter"
-VERSION = "1.0.4"
+VERSION = "1.0.5"
 ORGANIZATION = "Imperial"
 WEBSITE = "https://imperial-corporation.pages.dev/icc"
 REPOSITORY = "https://github.com/Imperial-Corporation/Imperial-CodeCenter"

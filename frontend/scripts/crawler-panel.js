@@ -157,9 +157,14 @@
             "Sans mot-clé : les dépôts les plus étoilés du langage.");
 
         const starsInput = numberInput(100, 0, 1000000);
-        const reposInput = numberInput(20, 1, 500);
-        const perRepoInput = numberInput(15, 1, 200);
-        const maxFilesInput = numberInput(200, 1, 20000);
+        const reposInput = numberInput(20, 1, 10000);
+        const perRepoInput = numberInput(15, 1, 5000);
+        const maxFilesInput = numberInput(200, 1, 1000000);
+        const maxKbInput = numberInput(60, 1, 10240);
+        const testsInput = el("input");
+        testsInput.type = "checkbox";
+        const forceInput = el("input");
+        forceInput.type = "checkbox";
         const topicsInput = el("input");
         topicsInput.type = "text";
         topicsInput.placeholder = "ex. fastapi, cli";
@@ -175,10 +180,35 @@
             field("cp-repos", "Dépôts maximum", reposInput),
             field("cp-perrepo", "Fichiers par dépôt", perRepoInput),
             field("cp-maxfiles", "Fichiers au total", maxFilesInput),
+            field("cp-maxkb", "Taille max d'un fichier (Ko)", maxKbInput),
             field("cp-topics", "Topics GitHub", topicsInput, "Séparés par des virgules."),
             field("cp-repolist", "Dépôts précis", reposListInput, "proprietaire/nom, séparés par des virgules."),
         );
         advancedSearch.append(advGrid);
+        const testsRow = el("label", "sp-check");
+        testsRow.append(testsInput, document.createTextNode(" Inclure les fichiers de tests"));
+        const forceRow = el("label", "sp-check");
+        forceRow.append(forceInput, document.createTextNode(" Forcer la nouvelle collecte des dépôts déjà explorés"));
+        advancedSearch.append(testsRow, forceRow, el("small", "sp-hint",
+            "Sans cette option, les fichiers inchangés (même SHA) sont ignorés, les nouveaux ajoutés et les modifiés mis à jour. GitHub n'est jamais modifié."));
+
+        /* mode NORMAL / UNSAFE */
+        const modeNormal = el("input");
+        modeNormal.type = "radio"; modeNormal.name = "cp-mode"; modeNormal.value = "normal"; modeNormal.checked = true;
+        const modeUnsafe = el("input");
+        modeUnsafe.type = "radio"; modeUnsafe.name = "cp-mode"; modeUnsafe.value = "unsafe";
+        const modeBox = el("div", "sp-field cp-mode");
+        modeBox.append(el("span", "sp-label", "Mode de collecte"));
+        const modeRow1 = el("label", "sp-check");
+        modeRow1.append(modeNormal, document.createTextNode(" NORMAL : limites configurables (comportement habituel)"));
+        const modeRow2 = el("label", "sp-check");
+        modeRow2.append(modeUnsafe, document.createTextNode(" UNSAFE : aucune limite de dépôts, fichiers, durée ni taille"));
+        const unsafeWarn = el("p", "cp-unsafe-warn",
+            "UNSAFE collecte jusqu'à épuisement des dépôts accessibles ou arrêt manuel. Garde-fous conservés : espace disque minimal, " +
+            "exclusion des secrets, limites de débit GitHub (attente automatique), arrêt d'urgence, chemin de stockage protégé. " +
+            "La collecte peut être très longue et volumineuse.");
+        unsafeWarn.hidden = true;
+        modeBox.append(modeRow1, modeRow2, unsafeWarn);
 
         /* quand démarrer */
         const startNow = el("input");
@@ -259,9 +289,21 @@
         message.setAttribute("role", "status");
         message.setAttribute("aria-live", "polite");
 
-        form.append(langField, queryField, advancedSearch, startBox, stopBox, freeField, tokenField, adminField, actions, message);
+        function applyMode() {
+            const unsafe = modeUnsafe.checked;
+            unsafeWarn.hidden = !unsafe;
+            // En UNSAFE, le serveur refuse ces limites : on les masque plutôt que de laisser une erreur 422.
+            [reposInput, perRepoInput, maxFilesInput].forEach((input) => { input.disabled = unsafe; });
+            stopBox.hidden = unsafe;
+            panel.dataset.mode = unsafe ? "unsafe" : "normal";
+        }
+        modeNormal.addEventListener("change", applyMode);
+        modeUnsafe.addEventListener("change", applyMode);
+
+        form.append(langField, queryField, modeBox, advancedSearch, startBox, stopBox, freeField, tokenField, adminField, actions, message);
         panel.append(head, intro, statusCard, form);
         document.body.append(fab, panel);
+        applyMode();
 
         /* ----- affichage ----- */
 
@@ -339,6 +381,29 @@
             return nodes;
         }
 
+        /* Paramètres réellement appliqués par le crawler (annoncés par lui au démarrage). */
+        function effectiveParams(effective) {
+            const details = el("details", "cp-effective");
+            details.open = true;
+            details.append(el("summary", "", "Paramètres appliqués"));
+            const grid = el("dl", "cp-params");
+            const unlimited = (v) => (v === null || v === undefined || v === 0 ? "illimité" : String(v));
+            const rows = [
+                ["Mode", String(effective.mode || "normal").toUpperCase()],
+                ["Langages", (effective.languages || []).join(", ") || "—"],
+                ["Étoiles min.", effective.min_stars],
+                ["Dépôts max.", unlimited(effective.max_repos)],
+                ["Fichiers / dépôt", unlimited(effective.max_files_per_repo)],
+                ["Fichiers total", unlimited(effective.max_files)],
+                ["Taille max fichier", effective.max_file_kb !== undefined ? `${effective.max_file_kb} Ko` : "—"],
+                ["Fichiers de tests", effective.include_tests ? "inclus" : "exclus"],
+                ["Recollecte forcée", effective.force ? "oui" : "non"],
+            ];
+            for (const [k, v] of rows) grid.append(el("dt", "", k), el("dd", "", v === undefined ? "—" : v));
+            details.append(grid);
+            return details;
+        }
+
         function renderStatus(status) {
             lastStatus = status;
             statusCard.replaceChildren();
@@ -366,6 +431,13 @@
                 } else if (job.ended_at) {
                     box.append(el("p", "cp-progress", summaryLine(progress)));
                 }
+                if (job.mismatches && job.mismatches.length) {
+                    const warn = el("div", "cp-mismatch");
+                    warn.append(el("strong", "", "Écart entre demandé et appliqué"), el("ul", "", ""));
+                    job.mismatches.forEach((m) => warn.lastChild.append(el("li", "", m)));
+                    box.append(warn);
+                }
+                if (job.effective) box.append(effectiveParams(job.effective));
                 if (job.message) box.append(el("p", "cp-message", job.message));
                 if (job.log && job.log.length) {
                     const details = el("details", "cp-log");
@@ -432,8 +504,16 @@
                 max_repos: Number(reposInput.value),
                 max_files_per_repo: Number(perRepoInput.value),
                 max_files: Number(maxFilesInput.value),
-                min_free_gb: Number(freeInput.value),
+                max_file_kb: Number(maxKbInput.value),
+                include_tests: testsInput.checked,
+                force: forceInput.checked,
+                mode: modeUnsafe.checked ? "unsafe" : "normal",
+                min_free_gb: Math.max(Number(freeInput.value), modeUnsafe.checked ? 1 : 0.5),
             };
+            // UNSAFE : le serveur refuse toute limite de volume ou de durée, on ne les envoie pas.
+            if (request.mode === "unsafe") {
+                delete request.max_repos; delete request.max_files_per_repo; delete request.max_files;
+            }
 
             if (startLater.checked) {
                 request.start_at = toUtcIso(startAt.value);
@@ -442,13 +522,15 @@
                     throw new Error("L'heure de démarrage est déjà passée.");
                 }
             }
-            if (rowAt.check.checked) {
+            if (request.mode === "normal" && rowAt.check.checked) {
                 request.stop_at = toUtcIso(rowAt.control.value);
                 if (!request.stop_at) throw new Error("Indique l'heure d'arrêt.");
             }
-            if (rowMinutes.check.checked) request.max_minutes = Number(rowMinutes.control.value);
-            if (rowGb.check.checked) request.max_gb = Number(rowGb.control.value);
-            if (rowLibrary.check.checked) request.max_library_gb = Number(rowLibrary.control.value);
+            if (request.mode === "normal") {
+                if (rowMinutes.check.checked) request.max_minutes = Number(rowMinutes.control.value);
+                if (rowGb.check.checked) request.max_gb = Number(rowGb.control.value);
+                if (rowLibrary.check.checked) request.max_library_gb = Number(rowLibrary.control.value);
+            }
             return request;
         }
 

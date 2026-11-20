@@ -17,7 +17,7 @@ Options : `--dry-run` (n'agit pas), `--yes`, `--no-push`, `--skip-tests`, `--rem
 2. **Tests** : API, crawler, moteur Rust.
 3. **Compiler** le moteur (wheels Python) :
    - Linux **amd64** et **arm64** (serveurs, Raspberry Pi, VPS ARM), manylinux ;
-   - macOS (universal2 : Intel + Apple Silicon) et Windows x64 — *au mieux* : un échec n'empêche pas la release ;
+   - Windows x64 — *au mieux* : un échec n'empêche pas la release (macOS n'est plus compilé : runner non pris en charge par tous les comptes, voir le commentaire de `release.yml`) ;
    - sdist, archive des sources, `icc.pyz` (CLI autonome).
 4. **Image Docker** amd64 + arm64 publiée sur `ghcr.io/imperial-corporation/imperial-codecenter` (onglet *Packages* du dépôt) avec les tags `X.Y.Z`, `X.Y`, `X` et `latest` ; **scan Trivy** (la publication échoue sur une faille CRITIQUE corrigeable), **signature cosign** sans clé, **attestation de provenance**, **SBOM** SPDX.
 5. **Release GitHub créée automatiquement** : texte = `release-notes/X.Y.Z.md` (sinon la section du CHANGELOG), fichiers de compilation, SBOM et `SHA256SUMS`.
@@ -33,8 +33,8 @@ Une version ne s'écrase pas : pour refaire un tag, supprime-le d'abord (`git ta
 ## Vérifier une image
 
 ```bash
-cosign verify ghcr.io/imperial-corporation/imperial-codecenter:1.0.4 \
+cosign verify ghcr.io/imperial-corporation/imperial-codecenter:1.0.5 \
   --certificate-identity-regexp 'https://github.com/Imperial-Corporation/Imperial-CodeCenter/.github/workflows/release.yml@.*' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
-gh attestation verify oci://ghcr.io/imperial-corporation/imperial-codecenter:1.0.4 -R Imperial-Corporation/Imperial-CodeCenter
+gh attestation verify oci://ghcr.io/imperial-corporation/imperial-codecenter:1.0.5 -R Imperial-Corporation/Imperial-CodeCenter
 ```

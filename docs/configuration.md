@@ -8,6 +8,7 @@ Fichier : `config/.env` (développement) ou `/etc/imperial-codecenter/.env` (pro
 | `CODECENTER_WATCH_PATHS` | — | dossiers surveillés, séparés par `:` |
 | `CODECENTER_DATA_DIR` | `.local/data` | données de l'application |
 | `CODECENTER_SECRET_KEY` / `_FILE` / `CODECENTER_KEY_DIR` | généré | clé Fernet |
+| `CODECENTER_AI_TAG_DAILY_MAX` | 100 | appels IA par jour pour l'analyse des fichiers non classés (0 = désactivée) |
 | `CODECENTER_ADMIN_TOKEN` | vide | jeton Bearer des routes d'administration |
 | `CODECENTER_REGISTRATION` | open | `open` ou `closed` : inscriptions de comptes ([comptes.md](comptes.md)) |
 | `CODECENTER_IMPORT_MAX_FILE_KB` | 1000 | taille max d'un fichier importé |

@@ -99,7 +99,7 @@ class FakeApi:
                 data["is_admin"] = self.admin
             return ok(data)
         if path == "/about":
-            return ok({"name": "Imperial CodeCenter", "organization": "Imperial", "version": "1.0.4",
+            return ok({"name": "Imperial CodeCenter", "organization": "Imperial", "version": "1.0.5",
                        "license": "Imperial Community License 1.0", "website": "https://imperial-corporation.pages.dev/icc"})
         if path == "/chats":
             return ok({"chats": []})

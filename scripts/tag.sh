@@ -6,8 +6,8 @@
 # (tests, compilation amd64/arm64, image Docker, release avec ses notes).
 #
 #   ./scripts/tag.sh              # version lue dans le fichier VERSION
-#   ./scripts/tag.sh 1.0.4        # idem, avec contrôle : doit être égale à VERSION
-#   ./scripts/tag.sh 1.0.4 --dry-run   # affiche ce qui serait fait, ne change rien
+#   ./scripts/tag.sh 1.0.5        # idem, avec contrôle : doit être égale à VERSION
+#   ./scripts/tag.sh 1.0.5 --dry-run   # affiche ce qui serait fait, ne change rien
 #
 # Options : --dry-run, --no-push (tag local seulement), --yes (sans confirmation),
 #           --remote NOM (défaut : origin), --skip-tests.

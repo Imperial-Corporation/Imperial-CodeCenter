@@ -47,8 +47,8 @@ def test_full_flow_with_filters(tmp_path):
     names = [p.relative_to(tmp_path).as_posix() for p in files_on_disk(tmp_path)]
     assert "api/owner__repoa__src__app.py" in names               # classé « api », nom aplati
     assert "algorithmes/owner__repoa__src__sorter.py" in names
-    assert "divers/owner__repoa__src__plain.py" in names
-    assert "divers/owner__repob__lib__own.py" in names
+    assert "non-classe/owner__repoa__src__plain.py" in names
+    assert "non-classe/owner__repob__lib__own.py" in names
     assert len(names) == 4                                         # rien d'autre
     # Licences refusées / fork / archivé : jamais interrogés.
     explored = {r.url.path for r in fake.log if "/branches/" in r.url.path}
@@ -180,7 +180,7 @@ def test_new_commit_after_move_redownloads_but_never_rewrites_known_content(tmp_
     repo.commit = "f" * 40                                         # nouveau commit, contenu identique + un fichier
     repo.files["src/c.py"] = py_code("nouveau")
     stats = crawl(fake, tmp_path)
-    assert stats.files_saved == 1 and stats.files_skipped["doublon"] == 2
+    assert stats.files_saved == 1 and stats.files_skipped["inchange"] == 2
     new = sorted(set(files_on_disk(tmp_path)) - set(snapshot))
     assert len(new) == 1 and new[0].name == "o__r__src__c.py"
 

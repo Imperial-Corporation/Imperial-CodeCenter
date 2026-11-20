@@ -24,6 +24,11 @@ from icc_crawler.storage import Store
 TOKEN = "ghp_" + "A1b2C3d4E5" * 3 + "Zz9Yy8"   # faux jeton, 36 caractères après ghp_
 
 
+def git_blob_sha(data: bytes) -> str:
+    """SHA git d'un blob (celui que GitHub place dans les entrées d'arborescence)."""
+    return hashlib.sha1(b"blob %d\0" % len(data) + data).hexdigest()
+
+
 def py_code(tag: str, extra: str = "") -> bytes:
     """Fichier Python valide d'environ 400 octets, unique par `tag`."""
     body = f'''"""Module {tag}."""
@@ -155,7 +160,8 @@ class FakeGitHub:
             return httpx.Response(200, json={"name": rest[1], "commit": {"sha": repo.commit}})
         if rest[0] == "git" and rest[1] == "trees":
             tree = [{"path": "src", "type": "tree"}]
-            tree += [{"path": p, "type": "blob", "size": len(c)} for p, c in repo.files.items()]
+            tree += [{"path": p, "type": "blob", "size": len(c), "sha": git_blob_sha(c)}
+                     for p, c in repo.files.items()]
             return httpx.Response(200, json={"sha": repo.commit, "tree": tree, "truncated": False})
         if rest[0] == "license":
             if repo.license is None:

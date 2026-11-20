@@ -262,7 +262,7 @@ def _version() -> str:
 
         return VERSION
     except Exception:
-        return "1.0.4"
+        return "1.0.5"
 
 
 # --------------------------------------------------------------------------

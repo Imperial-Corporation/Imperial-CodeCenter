@@ -255,7 +255,7 @@ def test_get_tree_and_search_shapes(sleeps):
     fake = FakeGitHub(FakeRepo("o/r", files={"a.py": b"x" * 10}))
     c = make_client(fake, sleeps)
     tree, truncated = c.get_tree("o/r", fake.repos["o/r"].commit)
-    assert truncated is False and {"path": "a.py", "type": "blob", "size": 10} in tree
+    assert truncated is False and any(e["path"] == "a.py" and e["type"] == "blob" and e["size"] == 10 for e in tree)
     assert [i["full_name"] for i in c.search_repositories("q")] == ["o/r"]
     assert c.search_repositories("q", page=2) == []
 

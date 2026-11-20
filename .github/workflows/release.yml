@@ -207,7 +207,10 @@ jobs:
           - { name: "Linux arm64", runner: ubuntu-24.04-arm, target: aarch64, best_effort: false, interpreter: "--find-interpreter" }
           # macOS / Windows : les runners embarquent parfois un Python plus récent que ce que PyO3 accepte
           # (ex. 3.15 avec PyO3 0.27) ; on fige donc l'interpréteur sur Python 3.12.
-          - { name: "macOS (universal2)", runner: macos-14, target: universal2-apple-darwin, best_effort: true, interpreter: "--interpreter python" }
+          # macOS retiré : le runner macos-14 n'est pas pris en charge par tous les comptes
+          # (« The configuration 'macos-14-arm64-us-default' is not supported ») et bloquait la publication.
+          # Pour le rétablir : ajouter { name: "macOS (universal2)", runner: macos-14, target: universal2-apple-darwin,
+          # best_effort: true, interpreter: "--interpreter python" } à cette matrice.
           - { name: "Windows amd64", runner: windows-2022, target: x64, best_effort: true, interpreter: "--interpreter python" }
     steps:
       - uses: actions/checkout@v4
@@ -256,6 +259,9 @@ jobs:
   release:
     name: Release GitHub
     needs: [verify, docker-manifest, wheels, sources]
+    # Un job « au mieux » (Windows…) qui échoue ou n'est pas pris en charge ne doit pas bloquer la publication :
+    # les artefacts obligatoires sont vérifiés plus bas (wheels Linux amd64 et arm64).
+    if: ${{ !cancelled() && needs.verify.result == 'success' && needs.docker-manifest.result == 'success' && needs.sources.result == 'success' && needs.wheels.result != 'cancelled' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -268,6 +274,11 @@ jobs:
           pattern: dist-*
           path: dist
           merge-multiple: true
+      - name: Artefacts obligatoires présents
+        working-directory: dist
+        run: |
+          ls *manylinux*x86_64*.whl *manylinux*aarch64*.whl >/dev/null
+          ls *.tar.gz icc.pyz >/dev/null
       - name: Sommes de contrôle
         working-directory: dist
         run: sha256sum -- * | tee SHA256SUMS

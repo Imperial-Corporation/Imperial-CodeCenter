@@ -23,6 +23,7 @@ from codecenter_engine import get_stats, healt, start_watcher, stop_watcher  # n
 from icc_ai.about import ATTRIBUTION, LICENSE_NAME, VERSION, WEBSITE, about
 from icc_ai.accounts_api import router as accounts_router
 from icc_ai.admin_api import router as admin_router
+from icc_ai.collection_api import router as collection_router
 from icc_ai.admin_panel_api import backup_loop, public_router as metrics_router, router as admin_panel_router
 from icc_ai.code_api import router as code_router
 from icc_ai.api import router as ai_router
@@ -158,6 +159,7 @@ async def about_route():
 
 app.include_router(ai_router)
 app.include_router(admin_router)
+app.include_router(collection_router)
 app.include_router(accounts_router)
 app.include_router(admin_panel_router)
 app.include_router(code_router)

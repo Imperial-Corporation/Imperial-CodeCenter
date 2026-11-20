@@ -1,6 +1,6 @@
 # Imperial CodeCenter
 
-**Version 1.0.4** — Moteur de recherche de code et de documentation, assisté par IA.
+**Version 1.0.5** — Moteur de recherche de code et de documentation, assisté par IA.
 
 Exception : le créateur et les membres de l'équipe Imperial Corporation ne sont pas tenus par ces obligations (article 5.8, personnelle et non transmissible).
 
@@ -142,6 +142,14 @@ Le bouton à engrenage (dans la barre supérieure) ouvre le panneau :
 La configuration est **propre à chaque compte** et chiffrée avec une clé protégée par ton mot de passe : personne d'autre (administrateur compris) ne peut lire ni utiliser tes clés. Il faut un compte pour utiliser l'IA. Mot de passe oublié = clés à ressaisir. Les réglages des autres fournisseurs sont conservés quand on change.
 
 Particularités gérées par les connecteurs : système séparé et blocs `tool_use`/`tool_result` (Claude) ; arguments d'outils en chaîne JSON, `max_completion_tokens` vs `max_tokens` (OpenAI-compatibles) ; schémas OpenAPI restreints, `functionCall` sans identifiant, clé en en-tête (Gemini) ; arguments objets, `num_ctx`, modèle sans outils (Ollama, repli automatique sans outils).
+
+## Nouveautés de la 1.0.5
+
+Mise à jour **sans rien changer** (le suivi des fichiers collectés migre seul).
+
+- **Crawler** : mode **UNSAFE** (aucune limite de volume ni de durée, garde disque et exclusion des secrets conservées), paramètres réellement appliqués affichés, recherche au-delà de 1 000 résultats, arbres GitHub tronqués gérés.
+- **Suivi persistant** des fichiers collectés (SHA-256) : seuls les nouveaux et modifiés sont téléchargés ; option de recollecte forcée ([docs/crawler.md](docs/crawler.md)).
+- **Bibliothèque** (administration) : recherche, filtres, visionneuse colorée, édition locale, historique, téléchargement, reclassement, analyse IA plafonnée ([docs/administration.md](docs/administration.md)).
 
 ## Nouveautés de la 1.0.4
 

@@ -1,4 +1,4 @@
-# Référence de l'API (v1.0.4)
+# Référence de l'API (v1.0.5)
 
 Documentation interactive : `/docs`. Erreurs : `{"detail": "...", "code": "..."}`.
 
@@ -44,8 +44,16 @@ Une discussion enregistrée reçoit automatiquement les tours suivants de `/chat
 | `POST /api/v1/library/import` | multipart `files`, `tags`, `auto_classify`, `keep_folders` |
 | `POST /api/v1/library/depot/scan` | range la zone de dépôt maintenant |
 | `GET /api/v1/index/health` | échecs, dossiers non inscriptibles, ignorés, disque |
+| `GET /api/v1/library/files` | administrateur : liste paginée (`q`, `scope=name\|content\|all`, `repo`, `language`, `category`, `subcategory`, `license`, `extension`, `status`, `sort`, `order`, `page`, `page_size`) |
+| `GET /api/v1/library/files/facets` | valeurs de filtres et totaux |
+| `GET\|PUT /api/v1/library/files/{id}/content` | lecture (tranches `offset`/`limit`) ; modification locale `{content, expected_sha256}` (409 si conflit) |
+| `GET /api/v1/library/files/{id}/download` | téléchargement (pièce jointe) |
+| `DELETE /api/v1/library/files/{id}` | suppression locale (version restaurable) |
+| `GET /api/v1/library/files/{id}/versions[/{vid}]`, `POST …/{vid}/restore` | historique et restauration |
+| `PUT /api/v1/library/files/{id}/category` | `{category, subcategory, tags}` : reclassement manuel |
+| `GET\|POST /api/v1/library/ai-tagging` | budget d'analyse IA ; lancement `{limit, ids}` (plafonné) |
 | `GET /api/v1/crawler` | état, historique, disque |
-| `POST /api/v1/crawler/start` | `{languages, query, start_at, stop_at, max_minutes, max_gb, max_library_gb, min_free_gb, …}` |
+| `POST /api/v1/crawler/start` | `{mode: normal\|unsafe, languages, query, start_at, stop_at, max_minutes, max_gb, max_library_gb, min_free_gb, max_file_kb, include_tests, force, …}` (champ inconnu = 422 ; limites refusées en `unsafe`) |
 | `POST /api/v1/crawler/stop` | arrête ou annule la planification |
 | `PUT /api/v1/crawler/token` | `{token}` ou `{clear: true}` |
 

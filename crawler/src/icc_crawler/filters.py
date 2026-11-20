@@ -82,6 +82,11 @@ class FilterConfig:
     languages: frozenset[str] | None = None  # slugs ; None = tous
 
 
+def directory_pruned(path: str) -> bool:
+    """Ce dossier (chemin relatif, `a/b`) ne contiendra jamais de fichier retenu : inutile de le parcourir."""
+    return PurePosixPath(path).name.lower() in SKIP_DIRECTORIES
+
+
 def extension_of(path: str) -> str:
     return PurePosixPath(path).suffix.lstrip(".").lower()
 

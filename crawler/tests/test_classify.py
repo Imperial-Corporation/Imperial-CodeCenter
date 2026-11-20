@@ -7,7 +7,7 @@ from icc_crawler.classify import DEFAULT_CATEGORY, RULES, classify
 
 
 def test_default_when_nothing_matches():
-    assert classify("src/foo.py", content="x = 1\n") == DEFAULT_CATEGORY == "divers"
+    assert classify("src/foo.py", content="x = 1\n") == DEFAULT_CATEGORY == "non-classe"
 
 
 def test_single_weak_hint_is_not_enough():

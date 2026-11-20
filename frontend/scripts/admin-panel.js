@@ -15,10 +15,11 @@
     const T = (text) => (ICC.i18n ? ICC.i18n.t(text) : text);
 
     const TABS = [
-        ["users", "Comptes"],
-        ["index", "Index"],
-        ["system", "Système"],
-        ["backups", "Sauvegardes"],
+        ["users", "Comptes", "users"],
+        ["library", "Bibliothèque", "library"],
+        ["index", "Index", "database"],
+        ["system", "Système", "server"],
+        ["backups", "Sauvegardes", "archive"],
     ];
 
     let dialog = null;
@@ -198,6 +199,39 @@
         if (scan.running) timer = window.setTimeout(refresh, 1000);
     }
 
+    /* ----- Jeton GitHub : état affiché, valeur jamais renvoyée ----- */
+
+    const TOKEN_STATES = {
+        enregistre: ["Enregistré (chiffré sur le serveur)", "ok"],
+        environnement: ["Fourni par variable d'environnement", "ok"],
+        aucun: ["Aucun jeton : 60 requêtes/h seulement", "warn"],
+    };
+
+    async function githubTokenCard() {
+        const card = el("div", "adm-card");
+        let source = "aucun";
+        try { source = (await ICC.services.crawlerStatus()).token || "aucun"; } catch { /* état inconnu */ }
+        const [label, kind] = TOKEN_STATES[source] || ["État inconnu", "warn"];
+        const head = el("div", "adm-card-head");
+        head.append(ICC.icons.make("key", 16), el("strong", "", "Jeton GitHub"), el("span", `adm-badge adm-badge-${kind}`, label));
+        const input = el("input", "adm-input");
+        input.type = "password";
+        input.autocomplete = "new-password";
+        input.placeholder = "ghp_… ou github_pat_… (jamais réaffiché)";
+        const actions = el("div", "adm-actions");
+        const apply = async (clear) => {
+            try {
+                await ICC.services.crawlerToken(clear ? null : input.value.trim(), clear);
+                input.value = "";
+                ICC.notify(clear ? "Jeton effacé." : "Jeton enregistré (chiffré).", "ok");
+                refresh();
+            } catch (error) { ICC.notify(error.message, "error"); }
+        };
+        actions.append(button("Enregistrer", () => apply(false), "adm-btn adm-primary"), button("Effacer", () => apply(true), "adm-btn adm-danger"));
+        card.append(head, input, actions, el("small", "adm-muted", "Stocké chiffré ; la valeur n'est jamais renvoyée au navigateur."));
+        return card;
+    }
+
     /* ----- Système ----- */
 
     function meter(label, value, total, text) {
@@ -229,8 +263,9 @@
         if (cd) items.push(meter("Disque de la bibliothèque", cd.used, cd.total, `${bytes(cd.free)} libres`));
         items.push(el("p", "adm-muted", `Base des comptes : ${bytes((s.disk || {}).accounts_db)}`));
         items.push(el("p", "adm-muted", "Métriques Prometheus : /metrics (jeton CODECENTER_METRICS_TOKEN)."));
+        items.push(await githubTokenCard());
         body.replaceChildren(...items);
-        timer = window.setTimeout(refresh, 5000);
+        timer = window.setTimeout(refresh, 15000);
     }
 
     /* ----- Sauvegardes ----- */
@@ -275,12 +310,18 @@
         body.replaceChildren(withCodes, pass, create, status, list, help);
     }
 
-    const VIEWS = { users: renderUsers, index: renderIndex, system: renderSystem, backups: renderBackups };
+    const VIEWS = {
+        users: renderUsers, index: renderIndex, system: renderSystem, backups: renderBackups,
+        library: (body) => ICC.library.render(body),
+    };
 
     async function refresh() {
         stopTimer();
         if (!dialog || !dialog.open) return;
         const body = dialog.querySelector(".adm-body");
+        dialog.classList.toggle("adm-wide", current === "library");
+        if (current !== "library" && ICC.library) ICC.library.dispose();
+        body.setAttribute("aria-busy", "true");
         try {
             await VIEWS[current](body);
         } catch (error) {
@@ -289,6 +330,8 @@
             } else {
                 body.replaceChildren(el("p", "auth-error", error.message || "Erreur inattendue."));
             }
+        } finally {
+            body.removeAttribute("aria-busy");
         }
     }
 
@@ -297,7 +340,11 @@
             dialog = el("dialog", "auth-dialog adm-dialog");
             dialog.setAttribute("aria-label", "Administration");
             dialog.addEventListener("click", (event) => { if (event.target === dialog) dialog.close(); });
-            dialog.addEventListener("close", stopTimer);
+            dialog.addEventListener("close", () => { stopTimer(); if (ICC.library) ICC.library.dispose(); });
+            // Échap ne doit pas perdre une modification non enregistrée.
+            dialog.addEventListener("cancel", (event) => {
+                if (ICC.library && ICC.library.isDirty() && !window.confirm(T("Des modifications ne sont pas enregistrées. Quitter quand même ?"))) event.preventDefault();
+            });
             document.body.append(dialog);
         }
         const head = el("div", "adm-head");
@@ -305,12 +352,14 @@
         head.append(button("Fermer", () => dialog.close(), "auth-secondary"));
         const tabs = el("div", "auth-tabs");
         tabs.setAttribute("role", "tablist");
-        TABS.forEach(([id, label]) => {
-            const tab = el("button", "auth-tab", label);
+        TABS.forEach(([id, label, iconName]) => {
+            const tab = el("button", "auth-tab");
+            tab.append(ICC.icons.make(iconName, 15), el("span", "", T(label)));
             tab.type = "button";
             tab.setAttribute("role", "tab");
             tab.setAttribute("aria-selected", String(id === current));
             tab.addEventListener("click", () => {
+                if (ICC.library && ICC.library.isDirty() && !window.confirm(T("Des modifications ne sont pas enregistrées. Quitter quand même ?"))) return;
                 current = id;
                 tabs.querySelectorAll(".auth-tab").forEach((t, i) => t.setAttribute("aria-selected", String(TABS[i][0] === id)));
                 refresh();

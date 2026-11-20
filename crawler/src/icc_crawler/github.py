@@ -206,12 +206,52 @@ class GitHubClient:
         data = self._json(f"/repos/{full_name}/branches/{quote(branch, safe='')}")
         return str(data["commit"]["sha"])
 
-    def get_tree(self, full_name: str, commit_sha: str) -> tuple[list[dict], bool]:
-        """Arborescence complète d'un commit : (entrées, tronquée ?)."""
-        data = self._json(f"/repos/{full_name}/git/trees/{commit_sha}", {"recursive": "1"})
+    def get_tree(self, full_name: str, commit_sha: str, *, recursive: bool = True) -> tuple[list[dict], bool]:
+        """Arborescence d'un commit ou d'un dossier : (entrées, tronquée ?)."""
+        params = {"recursive": "1"} if recursive else None
+        data = self._json(f"/repos/{full_name}/git/trees/{commit_sha}", params)
         if not isinstance(data, dict):
             return [], False
         return list(data.get("tree") or []), bool(data.get("truncated"))
+
+    def get_full_tree(self, full_name: str, commit_sha: str, *,
+                      prune: Callable[[str], bool] | None = None,
+                      checkpoint: Callable[[], None] | None = None,
+                      max_requests: int | None = None) -> tuple[list[dict], bool | None]:
+        """Arborescence complète, même quand GitHub tronque la réponse récursive.
+
+        L'API récursive est limitée (≈ 100 000 entrées) : au-delà, la réponse est marquée `truncated`
+        et des fichiers manqueraient sans bruit. On parcourt alors les dossiers un par un (en ignorant
+        ceux que `prune` écarte). Retourne (entrées, incomplète) : `incomplete` vaut None si la réponse
+        récursive était complète, False si le parcours dossier par dossier a tout récupéré, True s'il
+        reste des trous (dossier trop grand ou nombre de requêtes épuisé).
+        """
+        entries, truncated = self.get_tree(full_name, commit_sha)
+        if not truncated:
+            return entries, None
+
+        collected: list[dict] = []
+        incomplete = False
+        requests = 0
+        stack: list[tuple[str, str]] = [("", commit_sha)]
+        while stack:
+            if checkpoint:
+                checkpoint()
+            if max_requests is not None and requests >= max_requests:
+                incomplete = True
+                break
+            prefix, sha = stack.pop()
+            level, level_truncated = self.get_tree(full_name, sha, recursive=False)
+            requests += 1
+            incomplete = incomplete or level_truncated
+            for entry in level:
+                path = f"{prefix}{entry.get('path', '')}"
+                if entry.get("type") == "tree":
+                    if not (prune and prune(path)):
+                        stack.append((f"{path}/", str(entry.get("sha", ""))))
+                else:
+                    collected.append({**entry, "path": path})
+        return collected, incomplete
 
     def get_license_text(self, full_name: str) -> str | None:
         try:

@@ -226,7 +226,8 @@ def test_progress_json_is_valid_jsonl_with_final_done(tmp_path, capsys):
     assert len(progress) >= 2                       # 12 fichiers : au moins tous les 5
     for e in progress:
         assert set(e) == {"event", "files", "bytes", "repos", "skipped", "elapsed", "phase", "repos_done",
-                          "repos_target", "files_target", "repo", "repo_files", "repo_quota", "recent", "errors"}
+                          "repos_target", "files_target", "repo", "repo_files", "repo_quota", "recent", "errors",
+                          "updated", "trees_truncated"}
         assert e["phase"] in {"discovery", "exploring", "done"} and isinstance(e["recent"], list)
         assert all(isinstance(e[k], (int, float)) for k in ("files", "bytes", "repos", "skipped", "elapsed"))
     assert [e["files"] for e in progress] == sorted(e["files"] for e in progress)

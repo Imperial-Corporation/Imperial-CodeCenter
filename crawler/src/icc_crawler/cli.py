@@ -129,6 +129,14 @@ def build_parser() -> argparse.ArgumentParser:
     crawl.add_argument("--include-tests", action="store_true", help="garder aussi les fichiers de test")
     crawl.add_argument("--pause", type=non_negative_float, default=0.2, help="pause entre requêtes (s)")
     crawl.add_argument("--dry-run", action="store_true", help="afficher sans rien écrire")
+    crawl.add_argument("--force", action="store_true",
+                       help="collecte forcée : réexplorer les dépôts même s'ils sont à jour, retélécharger "
+                            "chaque fichier et le comparer (inchangé : conservé ; modifié : mis à jour)")
+    crawl.add_argument("--unsafe", action="store_true",
+                       help="mode UNSAFE : aucun plafond de dépôts, de fichiers par dépôt ni de fichiers au total, "
+                            "ni de durée, de volume ou de taille de bibliothèque. Gardes conservées : espace "
+                            "disque libre, exclusion des secrets, limites de débit GitHub, arrêt demandé, "
+                            "confinement des chemins. Incompatible avec --stop-at/--max-minutes/--max-gb/--max-library-gb")
 
     budget = crawl.add_argument_group("budgets d'arrêt (l'exécution s'arrête proprement et peut être reprise)")
     budget.add_argument("--stop-at", type=iso_datetime, metavar="ISO8601",
@@ -198,7 +206,8 @@ class ProgressReporter:
             "repos_target": stats.repos_target, "files_target": stats.files_target,
             "repo": stats.current_repo, "repo_files": stats.repo_files,
             "repo_quota": stats.repo_quota, "recent": list(stats.recent),
-            "errors": len(stats.errors),
+            "errors": len(stats.errors), "updated": stats.files_updated,
+            "trees_truncated": stats.trees_truncated,
         })
 
     def done(self, stats: Stats) -> None:
@@ -230,9 +239,30 @@ def _install_signal_handlers(crawler_stop: threading.Event) -> Callable[[], None
     return restore
 
 
+UNSAFE_MIN_FREE_GB = 1.0        # plancher de la garde disque en mode UNSAFE (jamais désactivable)
+UNSAFE_MAX_WAIT = 3700.0        # un quota GitHub se renouvelle en une heure : on attend plutôt que d'abandonner
+
+
+def _check_unsafe(args: argparse.Namespace) -> str | None:
+    """Message d'erreur si `--unsafe` est combiné avec un plafond ou sans garde disque."""
+    if not args.unsafe:
+        return None
+    for name in ("stop_at", "max_minutes", "max_gb", "max_library_gb"):
+        if getattr(args, name) is not None:
+            return f"--{name.replace('_', '-')} est incompatible avec --unsafe (aucune limite de durée ni de taille)."
+    if args.min_free_gb < UNSAFE_MIN_FREE_GB:
+        return (f"--unsafe exige une garde disque : --min-free-gb doit valoir au moins {UNSAFE_MIN_FREE_GB} "
+                f"(reçu : {args.min_free_gb}).")
+    return None
+
+
 def _run_crawl(args: argparse.Namespace, transport: httpx.BaseTransport | None = None) -> int:
     if not (args.language or args.query or args.topic or args.repo):
         print("Précise au moins --language, --query, --topic ou --repo.", file=sys.stderr)
+        return EXIT_USAGE
+    problem = _check_unsafe(args)
+    if problem:
+        print(problem, file=sys.stderr)
         return EXIT_USAGE
 
     clock_now = datetime.now(timezone.utc)
@@ -255,7 +285,7 @@ def _run_crawl(args: argparse.Namespace, transport: httpx.BaseTransport | None =
         destination=args.dest, languages=args.language, query=args.query, topics=args.topic,
         repos=args.repo, min_stars=args.min_stars, max_repos=args.max_repos,
         max_files_per_repo=args.max_files_per_repo, max_files=args.max_files,
-        dry_run=args.dry_run, filters=filters,
+        dry_run=args.dry_run, filters=filters, unsafe=args.unsafe, force=args.force,
     )
     budget = Budget(
         stop_at=args.stop_at,
@@ -268,6 +298,7 @@ def _run_crawl(args: argparse.Namespace, transport: httpx.BaseTransport | None =
     stop = threading.Event()
     # Les attentes (pause, quota) se réveillent dès qu'un arrêt est demandé.
     client = GitHubClient(token, transport=transport, pause=args.pause,
+                          max_wait=UNSAFE_MAX_WAIT if args.unsafe else 900.0,
                           sleep=lambda seconds: stop.wait(max(0.0, seconds)) and None)
     json_mode = args.progress_json
     reporter = ProgressReporter(sys.stdout, client.redact) if json_mode else None
@@ -288,6 +319,8 @@ def _run_crawl(args: argparse.Namespace, transport: httpx.BaseTransport | None =
         reporter.start({
             "dest": str(args.dest), "languages": list(args.language), "dry_run": bool(args.dry_run),
             "authenticated": client.authenticated, "budget": budget.describe(),
+            # Paramètres réellement appliqués (après validation et plafonds) : l'API les affiche tels quels.
+            "config": config.describe(),
         })
     try:
         stats = crawler.run()
@@ -302,13 +335,15 @@ def _run_crawl(args: argparse.Namespace, transport: httpx.BaseTransport | None =
 
     print(f"\nDépôts examinés : {stats.repos_seen} (déjà à jour : {stats.repos_skipped})", file=human)
     print(f"Fichiers {'qui seraient ' if args.dry_run else ''}enregistrés : {stats.files_saved} "
-          f"({stats.bytes_written // 1024} Ko écrits, {stats.elapsed_seconds:.0f} s)", file=human)
+          f"dont {stats.files_updated} mis à jour ({stats.bytes_written // 1024} Ko écrits, "
+          f"{stats.elapsed_seconds:.0f} s)", file=human)
     if stats.files_skipped:
         detail = ", ".join(f"{k}={v}" for k, v in sorted(stats.files_skipped.items()))
         print(f"Fichiers écartés : {detail}", file=human)
     for error in stats.errors[:10]:
         print(f"Avertissement : {client.redact(error)}", file=sys.stderr)
-    print(f"Fin : {stats.stop_reason}", file=human if stats.stop_reason == "termine" else sys.stderr)
+    ending = stats.stop_reason + (f" ({stats.stop_detail})" if stats.stop_detail else "")
+    print(f"Fin : {ending}", file=human if stats.stop_reason == "termine" else sys.stderr)
     return EXIT_PROBLEM if stats.stop_reason in PROBLEM_REASONS else EXIT_OK
 
 

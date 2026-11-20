@@ -28,6 +28,21 @@ Un seul travail à la fois. Le travail planifié est restauré au redémarrage d
 
 `<dossier surveillé>/github/<langage>/<dépôt>/…`, avec licence et origine conservées. Une base SQLite (`.crawler/`) mémorise ce qui est déjà téléchargé : le rangement par le moteur ne provoque pas de re-téléchargement.
 
+## Modes NORMAL et UNSAFE
+
+- **NORMAL** (défaut) : dépôts maximum, fichiers par dépôt, fichiers au total, durée, volume téléchargé et taille de bibliothèque sont configurables.
+- **UNSAFE** (`--unsafe`, ou le sélecteur de l'interface) : aucune de ces limites ; la collecte va jusqu'à épuisement des dépôts accessibles ou arrêt manuel. Les demandes qui fixent `stop_at`, `max_minutes`, `max_gb` ou `max_library_gb` sont refusées. Restent actifs : espace libre minimal (`--min-free-gb`, au moins 1 Go), exclusion des secrets, attente de la remise à zéro des limites de débit GitHub (jusqu'à plus d'une heure) au lieu d'un arrêt, arrêt manuel (`SIGTERM`) et stockage confiné à la destination.
+
+Les paramètres réellement appliqués sont annoncés par le crawler (événement `start`), affichés dans l'état de la collecte et comparés à la demande : tout écart est signalé et journalisé.
+
+## Suivi des fichiers collectés
+
+Chaque fichier est enregistré dans `<destination>/.crawler/crawler.sqlite3` (dépôt, chemin, branche, commit, SHA git du blob, SHA-256, licence, langage, catégorie, dates). Aux collectes suivantes : un fichier au même SHA est ignoré, un nouveau est téléchargé, un fichier modifié sur GitHub est mis à jour (l'ancienne version reste dans l'historique), les doublons sont évités et un fichier supprimé localement n'est pas retéléchargé. `--force` (case « Forcer la nouvelle collecte ») réexplore les dépôts déjà faits. Un dépôt n'est réexploré que si son commit, son quota par dépôt ou les filtres ont changé. GitHub n'est jamais modifié.
+
+## Catégories
+
+Dossier `<catégorie>[/<sous-catégorie>]/<langage>/`. Le classement automatique est heuristique ; les fichiers sans signal vont dans `non-classe`. L'onglet Bibliothèque permet de reclasser à la main (le fichier est déplacé) et de lancer une analyse IA de quelques fichiers non classés : jamais automatique, 25 fichiers au plus par lancement, `CODECENTER_AI_TAG_DAILY_MAX` appels par jour (100 par défaut, 0 = désactivée) ; un classement manuel n'est jamais écrasé.
+
 ## En ligne de commande
 
 ```bash
@@ -41,4 +56,4 @@ Codes de sortie : 0 normal (budget atteint compris), 1 limite de débit / erreur
 
 ## Limites
 
-Le collecteur a été testé avec des réponses GitHub simulées (254 tests), **pas contre le vrai GitHub** pendant le développement. Seuls les dépôts sous licence permissive sont collectés par défaut (MIT, Apache-2.0, BSD, ISC, CC0, Unlicense, Zlib, 0BSD) ; `--license` permet de changer la liste. Respecte les licences des dépôts collectés.
+Le collecteur a été testé avec des réponses GitHub simulées (plus de 300 tests), **pas contre le vrai GitHub** pendant le développement. Seuls les dépôts sous licence permissive sont collectés par défaut (MIT, Apache-2.0, BSD, ISC, CC0, Unlicense, Zlib, 0BSD) ; `--license` permet de changer la liste. Respecte les licences des dépôts collectés.

@@ -1,5 +1,30 @@
 # Changelog
 
+## 1.0.5
+Rétrocompatible : le suivi des fichiers collectés migre tout seul (schéma 1 → 2) ; aucune action manuelle.
+
+### Added
+- **Mode UNSAFE du crawler** (sélecteur NORMAL / UNSAFE dans l'interface, `--unsafe` en ligne de commande) : aucune limite de dépôts, de fichiers par dépôt, de fichiers au total, de durée ni de taille de bibliothèque ; la collecte va jusqu'à épuisement des dépôts accessibles ou arrêt manuel. Garde-fous conservés : espace disque libre minimal (≥ 1 Go), exclusion des secrets, attente des limites de débit GitHub, arrêt d'urgence, chemin de stockage protégé.
+- **Suivi persistant des fichiers collectés** (`<destination>/.crawler/crawler.sqlite3`) : dépôt, chemin, branche, commit, SHA git et SHA-256, licence, catégorie, dates. Aux collectes suivantes : fichiers inchangés ignorés, nouveaux téléchargés, modifiés mis à jour (ancienne version gardée), doublons évités. Option **forcer la nouvelle collecte** (`--force`). GitHub n'est jamais modifié.
+- **Catégories et sous-catégories** : taxonomie élargie (sécurité, réseau, texte et formats, IA et calcul, interface graphique, jeux, outils de développement…) avec sous-catégories ; catégorie « non-classe » ; reclassement manuel (le fichier est déplacé) ; **analyse IA facultative et plafonnée** de certains fichiers non classés (jamais automatique, 25 par lancement, `CODECENTER_AI_TAG_DAILY_MAX` par jour, 100 par défaut, 0 = désactivée).
+- **Onglet « Bibliothèque »** (administration) : nom/chemin, dépôt, langage/extension, catégorie/sous-catégorie, taille exacte, date, empreinte, licence ; recherche par nom et par contenu, filtres, tri, pagination ; visionneuse avec coloration syntaxique (lecture par tranches pour les gros fichiers), modification et enregistrement **locaux**, téléchargement, copie, suppression avec confirmation, historique et restauration. Routes `/api/v1/library/files…`.
+- **Interface d'administration modernisée** : navigation par onglets avec icônes (sous-ensemble Lucide embarqué localement, licence ISC), cartes de statistiques, tableaux plus lisibles, états de chargement, notifications, état du jeton GitHub sans jamais afficher sa valeur.
+- Paramètres de collecte : taille maximale d'un fichier, inclusion des tests ; **paramètres réellement appliqués** et écarts affichés dans l'état de la collecte.
+
+### Changed
+- Les champs inconnus d'une demande de collecte sont refusés (422) au lieu d'être ignorés ; limites du formulaire élargies (jusqu'à 10 000 dépôts, 5 000 fichiers par dépôt, 1 000 000 de fichiers).
+- Les dépôts déjà explorés sont réexplorés quand le quota par dépôt ou les filtres changent.
+
+### Fixed
+- **Publication** : la release n'est plus bloquée quand un job « au mieux » est ignoré ou échoue (runner macOS non pris en charge) ; macOS retiré de la matrice ; les wheels Linux amd64/arm64 restent obligatoires.
+- **Crawler** : paramètres du formulaire différents de ceux réellement utilisés (la chaîne formulaire → API → commande → crawler est désormais vérifiée par le crawler lui-même et les écarts sont signalés) ; recherche GitHub limitée à 1 000 résultats par requête (fenêtres d'étoiles) ; arbres GitHub tronqués (parcours dossier par dossier) ; raison et détail de l'arrêt dans l'état et le journal.
+
+### Security
+- Édition locale de la bibliothèque : confinement des chemins dans la destination, refus des liens symboliques et des traversées, fichiers réguliers seulement, modification protégée par l'empreinte attendue (409 en cas de conflit), téléchargement toujours en pièce jointe avec `nosniff`.
+- Analyse IA : contenu des fichiers traité comme donnée, réponse validée strictement, requêtes plafonnées par lancement et par jour.
+- UNSAFE : refus (422 / code 2) de toute combinaison sans garde disque ; exclusion des secrets conservée.
+- Routes de la bibliothèque réservées à l'administrateur ; interface sans `innerHTML` pour les contenus collectés.
+
 ## 1.0.4
 Rétrocompatible : mise à jour sans modification de configuration ni de données ([docs/compatibilite.md](docs/compatibilite.md)).
 

@@ -5,7 +5,7 @@
 
     python3 scripts/version.py check            # toutes les versions sont identiques ?
     python3 scripts/version.py check --tag v1.0.3   # ... et égales à celle du tag Git
-    python3 scripts/version.py set 1.0.4        # met à jour tous les fichiers
+    python3 scripts/version.py set 1.0.5        # met à jour tous les fichiers
     python3 scripts/version.py notes 1.0.3      # notes de version : release-notes/1.0.3.md, sinon section du CHANGELOG
     python3 scripts/version.py check --tag v1.0.3 --notes   # ... et vérifie que les notes existent
 
@@ -32,6 +32,7 @@ TARGETS: list[tuple[str, str]] = [
     ("crawler/pyproject.toml", r'^version = "(\d+\.\d+\.\d+)"'),
     ("api/src/icc_ai/about.py", r'^VERSION = "(\d+\.\d+\.\d+)"'),
     ("crawler/src/icc_crawler/__init__.py", r'^__version__ = "(\d+\.\d+\.\d+)"'),
+    ("api/uv.lock", r'name = "codecenter-api"\nversion = "(\d+\.\d+\.\d+)"'),
     ("crawler/uv.lock", r'name = "icc-crawler"\nversion = "(\d+\.\d+\.\d+)"'),
     ("README.md", r"\*\*Version (\d+\.\d+\.\d+)\*\*"),
     ("docs/README.md", r"— v(\d+\.\d+\.\d+)"),

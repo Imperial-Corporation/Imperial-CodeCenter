@@ -1,6 +1,6 @@
 # Imperial CodeCenter
 
-**Version 1.0.4** — A code and documentation search engine, assisted by AI. (Full documentation is in French: [`docs/`](docs/README.md). The web interface is available in French and English — use the **FR | EN** switch in the page footer.)
+**Version 1.0.5** — A code and documentation search engine, assisted by AI. (Full documentation is in French: [`docs/`](docs/README.md). The web interface is available in French and English — use the **FR | EN** switch in the page footer.)
 
 Lead developer: **yolezz** · Organisation: **Imperial** · Original idea: **HyperDemoned**
 
@@ -40,6 +40,12 @@ docker compose -f compose.yaml -f compose.lite.yaml up -d
 ```
 
 Create your account first: **the first account is the administrator**. Without Docker, see [docs/installation.md](docs/installation.md) (`scripts/install.sh`). Podman: [docs/podman.md](docs/podman.md).
+
+## What's new in 1.0.5 (backward compatible)
+
+- **Crawler**: **UNSAFE** mode (no cap on repositories, files, duration or size; disk guard, secret exclusion and GitHub rate-limit waiting kept), parameters actually applied are shown and checked, search beyond 1,000 results, truncated GitHub trees handled.
+- **Persistent tracking** of collected files (SHA-256): only new or changed files are downloaded; optional forced re-collection.
+- **Library** admin tab: search, filters, highlighted viewer, local editing (never pushed to GitHub), history and restore, download, recategorisation, capped AI tagging.
 
 ## What's new in 1.0.4 (fully backward compatible)
 

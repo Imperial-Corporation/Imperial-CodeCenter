@@ -180,6 +180,41 @@
         crawlerToken: (token, clear) =>
             http("/crawler/token", { method: "PUT", body: { token: token || null, clear: !!clear }, admin: true }),
 
+        /* Bibliothèque collectée (administrateur) : liste, contenu, édition locale, historique. */
+        library: {
+            files(params = {}) {
+                const query = new URLSearchParams();
+                for (const [key, value] of Object.entries(params)) {
+                    if (value !== undefined && value !== null && value !== "") query.set(key, String(value));
+                }
+                return http(`/library/files?${query}`, { admin: true });
+            },
+            facets: () => http("/library/files/facets", { admin: true }),
+            file: (id) => http(`/library/files/${Number(id)}`, { admin: true }),
+            content(id, offset = 0, limit) {
+                const query = new URLSearchParams({ offset: String(offset) });
+                if (limit) query.set("limit", String(limit));
+                return http(`/library/files/${Number(id)}/content?${query}`, { admin: true });
+            },
+            save: (id, content, expectedSha256) =>
+                http(`/library/files/${Number(id)}/content`, {
+                    method: "PUT", body: { content, expected_sha256: expectedSha256 }, admin: true,
+                }),
+            remove: (id) => http(`/library/files/${Number(id)}`, { method: "DELETE", admin: true }),
+            versions: (id) => http(`/library/files/${Number(id)}/versions`, { admin: true }),
+            version: (id, versionId) => http(`/library/files/${Number(id)}/versions/${Number(versionId)}`, { admin: true }),
+            restore: (id, versionId) =>
+                http(`/library/files/${Number(id)}/versions/${Number(versionId)}/restore`, { method: "POST", admin: true }),
+            setCategory: (id, category, subcategory, tags) =>
+                http(`/library/files/${Number(id)}/category`, {
+                    method: "PUT", body: { category, subcategory: subcategory || "", tags: tags || null }, admin: true,
+                }),
+            downloadUrl: (id) => `${API_BASE}/library/files/${Number(id)}/download`,
+            aiStatus: () => http("/library/ai-tagging", { admin: true }),
+            aiRun: (limit, ids) =>
+                http("/library/ai-tagging", { method: "POST", body: ids ? { ids, limit } : { limit }, admin: true }),
+        },
+
         aiCatalog: () => http("/ai/catalog"),
         aiConfig: () => http("/ai/config"),
 

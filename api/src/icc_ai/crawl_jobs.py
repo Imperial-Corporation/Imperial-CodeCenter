@@ -11,6 +11,15 @@ ni l'URL de la base). Un seul travail à la fois.
 Objectifs d'arrêt (tous optionnels, le premier atteint gagne) :
 heure précise, durée en minutes, volume téléchargé en Go, taille maximale de
 la bibliothèque, et un plancher d'espace disque libre toujours actif.
+
+Mode UNSAFE : aucun plafond de dépôts, de fichiers, de durée ni de taille de
+bibliothèque ; la garde disque (au moins 1 Go libre), l'exclusion des secrets,
+les limites GitHub et l'arrêt manuel restent actifs. Il est appliqué par le
+crawler lui-même, pas seulement par l'interface.
+
+Les paramètres réellement utilisés par le crawler (événement `start`) sont
+rangés dans `job["effective"]` ; tout écart avec la demande est signalé dans
+`job["mismatches"]`.
 """
 
 from __future__ import annotations
@@ -28,7 +37,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from . import crawler_bridge
 from .config.crypto import SecretBox
@@ -49,17 +58,32 @@ class JobBusyError(ValueError):
     """Un travail est déjà en cours ou planifié (le serveur répond 409)."""
 
 
+UNSAFE_MIN_FREE_GB = 1.0
+_UNSAFE_FORBIDDEN = ("stop_at", "max_minutes", "max_gb", "max_library_gb")
+
+
 class CrawlRequest(BaseModel):
     """Paramètres d'un travail de collecte (validés strictement)."""
+
+    # Un champ inconnu est une erreur (422), jamais ignoré en silence : sinon un paramètre mal
+    # nommé retomberait sur sa valeur par défaut sans que personne ne le voie.
+    model_config = ConfigDict(extra="forbid")
+
+    # NORMAL : plafonds configurables. UNSAFE : aucun plafond de dépôts / fichiers / durée / taille.
+    mode: Literal["normal", "unsafe"] = "normal"
+    # Collecte forcée : réexplorer les dépôts et retélécharger/comparer chaque fichier.
+    force: bool = False
 
     languages: list[str] = Field(default_factory=lambda: ["python"], max_length=10)
     query: str | None = Field(default=None, max_length=80)
     topics: list[str] = Field(default_factory=list, max_length=5)
     repos: list[str] = Field(default_factory=list, max_length=20)
     min_stars: int = Field(default=100, ge=0, le=1_000_000)
-    max_repos: int = Field(default=20, ge=1, le=500)
-    max_files_per_repo: int = Field(default=15, ge=1, le=200)
-    max_files: int = Field(default=200, ge=1, le=20_000)
+    max_repos: int = Field(default=20, ge=1, le=10_000)
+    max_files_per_repo: int = Field(default=15, ge=1, le=5_000)
+    max_files: int = Field(default=200, ge=1, le=1_000_000)
+    max_file_kb: int = Field(default=60, ge=1, le=10_240)
+    include_tests: bool = False
 
     # Quand démarrer : maintenant, ou à une heure précise (ISO 8601).
     start_at: str | None = None
@@ -105,6 +129,17 @@ class CrawlRequest(BaseModel):
         return cleaned
 
     @model_validator(mode="after")
+    def _unsafe_rules(self) -> "CrawlRequest":
+        if self.mode != "unsafe":
+            return self
+        for name in _UNSAFE_FORBIDDEN:
+            if getattr(self, name) is not None:
+                raise ValueError(f"{name} est incompatible avec le mode UNSAFE (aucune limite de durée ni de taille).")
+        if self.min_free_gb < UNSAFE_MIN_FREE_GB:
+            raise ValueError(f"Le mode UNSAFE garde l'espace disque : min_free_gb doit valoir au moins {UNSAFE_MIN_FREE_GB}.")
+        return self
+
+    @model_validator(mode="after")
     def _times(self) -> "CrawlRequest":
         start = parse_when(self.start_at, "start_at")
         stop = parse_when(self.stop_at, "stop_at")
@@ -144,8 +179,17 @@ def build_command(request: CrawlRequest, destination: Path, stop_at: datetime | 
         "--max-repos", str(request.max_repos),
         "--max-files-per-repo", str(request.max_files_per_repo),
         "--max-files", str(request.max_files),
+        "--max-kb", str(request.max_file_kb),
         "--min-free-gb", str(request.min_free_gb),
     ]
+    if request.include_tests:
+        command.append("--include-tests")
+    if request.force:
+        command.append("--force")
+    if request.mode == "unsafe":
+        # Aucune limite de durée ni de taille : on ne transmet jamais ces options.
+        command.append("--unsafe")
+        return command
     if stop_at is not None:
         command += ["--stop-at", stop_at.isoformat()]
     if request.max_minutes:
@@ -155,6 +199,31 @@ def build_command(request: CrawlRequest, destination: Path, stop_at: datetime | 
     if request.max_library_gb:
         command += ["--max-library-gb", str(request.max_library_gb)]
     return command
+
+
+def expected_config(request: CrawlRequest) -> dict:
+    """Ce que le crawler doit annoncer dans son événement `start` pour cette demande."""
+    unsafe = request.mode == "unsafe"
+    return {
+        "mode": request.mode,
+        "min_stars": request.min_stars,
+        "max_repos": None if unsafe else request.max_repos,
+        "max_files_per_repo": None if unsafe else request.max_files_per_repo,
+        "max_files": None if unsafe else request.max_files,
+        "max_file_kb": request.max_file_kb,
+        "include_tests": request.include_tests,
+        "force": request.force,
+        "languages": list(request.languages),
+    }
+
+
+def find_mismatches(request: CrawlRequest, effective: dict) -> list[str]:
+    """Écarts entre la demande et les paramètres réellement appliqués par le crawler."""
+    problems = []
+    for key, wanted in expected_config(request).items():
+        if effective.get(key) != wanted:
+            problems.append(f"{key} : demandé {wanted!r}, appliqué {effective.get(key)!r}")
+    return problems
 
 
 def _iso(moment: datetime | None) -> str | None:
@@ -278,6 +347,8 @@ class CrawlManager:
             "created_at": _iso(now),
             "started_at": None, "ended_at": None,
             "progress": {}, "stop_reason": None, "message": "", "log": [],
+            # Rempli par l'événement `start` du crawler : paramètres réellement utilisés.
+            "effective": None, "mismatches": [],
         }
         self._save()
         self._task = asyncio.ensure_future(self._run(self._job["id"]))
@@ -394,7 +465,14 @@ class CrawlManager:
                     event = json.loads(raw.decode("utf-8", "replace"))
                 except ValueError:
                     continue
-                if event.get("event") == "progress":
+                if event.get("event") == "start" and isinstance(event.get("config"), dict):
+                    job["effective"] = event["config"]
+                    job["mismatches"] = find_mismatches(request, event["config"])
+                    for problem in job["mismatches"]:
+                        logger.error("Paramètre de collecte non appliqué : %s", problem)
+                        job["log"] = (job["log"] + [f"ÉCART : {problem}"])[-30:]
+                    self._save()
+                elif event.get("event") == "progress":
                     job["progress"] = {k: event[k] for k in PROGRESS_KEYS if k in event}
                     job["progress"]["updated_at"] = time.time()
                     if time.monotonic() - last_save > 5:
@@ -422,11 +500,18 @@ class CrawlManager:
                 "repos": stats.get("repos_done"), "skipped": stats.get("files_skipped"),
                 "elapsed": stats.get("elapsed_seconds"),
             }
+            for key, source in (("updated", "files_updated"), ("trees_truncated", "trees_truncated")):
+                if source in stats:
+                    job["progress"][key] = stats[source]
+            job["stop_detail"] = stats.get("stop_detail") or ""
             reason = final.get("stop_reason")
             state = "failed" if code not in (0,) else "finished"
             if job["state"] == "stopping" and reason == "arret-demande":
                 state = "stopped"
-            self._finish(job, state, reason, REASON_LABELS.get(reason or "", ""))
+            label = REASON_LABELS.get(reason or "", "")
+            if job.get("stop_detail"):
+                label = f"{label} ({job['stop_detail']})"
+            self._finish(job, state, reason, label)
         else:
             if job["state"] == "stopping":  # tué par notre SIGTERM sans message final : arrêt demandé
                 self._finish(job, "stopped", "arret-demande", REASON_LABELS["arret-demande"])
@@ -435,7 +520,8 @@ class CrawlManager:
 
 
 PROGRESS_KEYS = ("files", "bytes", "repos", "skipped", "elapsed", "phase", "repos_done", "repos_target",
-                 "files_target", "repo", "repo_files", "repo_quota", "recent", "errors")
+                 "files_target", "repo", "repo_files", "repo_quota", "recent", "errors", "updated",
+                 "trees_truncated")
 
 REASON_LABELS = {
     "termine": "Collecte terminée.",

@@ -105,11 +105,26 @@ def test_dedup_does_not_depend_on_original_location(tmp_path):
     assert store.has_path("o/r", "c1", "src/a.py")
     assert not store.has_path("o/r", "c2", "src/a.py")
     assert save(store, commit_sha="c2") == (None, 0)          # même contenu : rien recréé
+    assert store.last_action == "unchanged"
     assert not target.exists()                                # pas de réapparition à l'ancien emplacement
+    assert store.has_path("o/r", "c2", "src/a.py")            # la provenance suit le nouveau commit
 
-    # Un contenu différent au même chemin ne réutilise pas le nom déjà attribué.
-    other, _ = save(store, b"print('y')\n", commit_sha="c2")
-    assert other.name != target.name and other.name == "o__r__src__a-2.py"
+
+def test_modified_content_updates_the_moved_file_in_place_and_keeps_history(tmp_path):
+    store = Store(tmp_path)
+    target, _ = save(store, commit_sha="c1")
+    (tmp_path / "divers" / "python").mkdir()
+    moved = tmp_path / "divers" / "python" / target.name
+    target.rename(moved)
+
+    updated, written = save(store, b"print('y')\n", commit_sha="c2")
+    assert updated == moved and written == len(b"print('y')\n")      # mis à jour là où le moteur l'a rangé
+    assert moved.read_bytes() == b"print('y')\n" and store.last_action == "updated"
+    assert store.stats()["files"] == 1                                  # pas de doublon
+    row = store.get_file("o/r", "src/a.py")
+    assert row["commit_sha"] == "c2" and row["sha256"] == hashlib.sha256(b"print('y')\n").hexdigest()
+    versions = store.db.execute("SELECT reason, content FROM file_versions").fetchall()
+    assert [(v["reason"], bytes(v["content"])) for v in versions] == [("mise-a-jour-github", b"print('x')\n")]
 
 
 def test_names_survive_reopening_the_store(tmp_path):
@@ -170,15 +185,13 @@ def test_write_failure_leaves_no_partial_file_and_no_db_row(tmp_path, monkeypatc
     assert save(store)[0] is not None                          # réessai possible
 
 
-def test_db_failure_removes_written_file(tmp_path, monkeypatch):
+def test_db_failure_removes_written_file(tmp_path):
     store = Store(tmp_path)
     save(store, b"un\n")
-    # Même sha déjà connu ne passe pas par l'écriture ; on force une collision de clé après coup.
-    original = store.known_hash
-    monkeypatch.setattr(store, "known_hash", lambda digest: False)
-    with pytest.raises(sqlite3.IntegrityError):
-        save(store, b"un\n", path="autre.py")
-    monkeypatch.setattr(store, "known_hash", original)
+    # Un déclencheur fait échouer l'insertion en base après l'écriture du fichier.
+    store.db.execute("CREATE TRIGGER refuse BEFORE INSERT ON files BEGIN SELECT RAISE(ABORT, 'refus'); END")
+    with pytest.raises(sqlite3.DatabaseError):
+        save(store, b"deux\n", path="autre.py")
     assert len(files_on_disk(tmp_path)) == 1
 
 

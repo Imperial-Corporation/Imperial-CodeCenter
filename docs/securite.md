@@ -19,3 +19,22 @@
 - **Métriques** : jeton dédié, comparaison en temps constant ; `CODECENTER_METRICS_PUBLIC` seulement sur réseau privé.
 - **Chaîne de publication** : scan Trivy, signature cosign sans clé, attestation de provenance, SBOM, CodeQL, Dependabot.
 - **Conteneur** : secrets par fichier (`*_FILE`), Podman rootless possible.
+
+## 1.0.5
+
+Audit ciblé du crawler, de la bibliothèque et de l'analyse IA ; seconde passe après correctifs (aucune régression, 713 tests API et la suite du crawler passent).
+
+### MEDIUM — Modification de fichiers collectés (nouvelle surface)
+Impact potentiel : écriture hors de la destination, écrasement concurrent. Correctif : chemins confinés sous la destination, liens symboliques et traversées refusés, fichiers réguliers seulement, écriture atomique, empreinte attendue obligatoire (409), taille limitée. Statut : corrigé, testé.
+
+### MEDIUM — Analyse IA et coûts
+Impact potentiel : consommation abusive du fournisseur, injection par le contenu d'un fichier. Correctif : lancement manuel, 25 fichiers par lancement, plafond quotidien, contenu tronqué traité comme donnée, réponse JSON validée strictement (catégories connues, noms de dossier sûrs), échec du fournisseur = arrêt du lot. Statut : corrigé, testé. Risque résiduel : un modèle peut mal classer un fichier (visible et corrigeable à la main).
+
+### MEDIUM — Mode UNSAFE
+Impact potentiel : disque saturé, fuite de secrets collectés. Correctif : espace libre minimal d'au moins 1 Go, exclusion des secrets inchangée, attente des limites de débit, rejet de toute demande contradictoire. Statut : corrigé, testé. Le mode reste volontairement sans plafond de volume : l'administrateur en est responsable.
+
+### LOW — Paramètres ignorés en silence
+Un champ de formulaire inconnu retombait sur une valeur par défaut. Correctif : champs inconnus refusés (422) et paramètres appliqués vérifiés. Statut : corrigé.
+
+### INFO
+Icônes : sous-ensemble Lucide (ISC) embarqué localement, aucun CDN (la CSP n'autorise que l'origine). Le crawler a été testé avec des réponses GitHub simulées, pas contre le vrai GitHub.

@@ -16,6 +16,10 @@ Réservée à l'**administrateur** : le premier compte créé, ou le porteur de 
 - **Relancer l'indexation** maintenant.
 - **Exclusions** : un motif par ligne, fichier `<données>/exclude.txt` (ou `CODECENTER_EXCLUDE_FILE`). Sans `/` : nom de fichier ou de dossier, insensible à la casse, `*` et `?` acceptés (`*.min.js`, `node_modules`, `tmp*`). Avec `/` : suite de dossiers n'importe où sous la racine (`vendor/legacy`, `docs/*/generated`). Enregistrer lance un passage : ce qui devient exclu est **retiré de l'index** (les fichiers restent sur le disque) et ce qui ne l'est plus est **ré-indexé**. `CODECENTER_EXCLUDE` (variable) s'ajoute aux motifs du fichier.
 
+## Bibliothèque
+
+Fichiers collectés par le crawler : nom et chemin, dépôt d'origine, langage et extension, catégorie et sous-catégorie, taille exacte en octets, date de collecte, SHA-256, licence. Recherche par nom ou par contenu (le contenu est parcouru dans une limite de fichiers et de temps ; l'interface le signale), filtres, tri, pagination. La visionneuse colore le code, lit les gros fichiers par tranches, permet de copier, télécharger, modifier et enregistrer **en local** (jamais envoyé à GitHub ; refus si le fichier a changé entre-temps), de consulter l'historique et de restaurer une version, de reclasser et de supprimer (avec confirmation ; une version reste restaurable). Les fichiers de plus de 2 Mo ou binaires ne sont pas modifiables.
+
 ## Système
 
 Profil actif, durée de fonctionnement, mémoire de la machine et du processus, charge, threads, espace disque (données et bibliothèque), taille de la base des comptes. Rafraîchi toutes les 5 secondes.
@@ -35,5 +39,7 @@ scrape_configs:
     authorization: { credentials: "VOTRE_JETON_DE_METRIQUES" }
     static_configs: [{ targets: ["127.0.0.1:8000"] }]
 ```
+
+Le jeton GitHub du crawler se gère dans l'onglet Système : seul son état (enregistré, variable d'environnement, aucun) est affiché, jamais sa valeur.
 
 Routes : voir [api.md](api.md).
